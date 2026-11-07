@@ -71,6 +71,13 @@ including your edits. Load the [fixture](./dataset.html) into an isolated server
 running downloaded examples with `psql`. Browser cells accept SQL; they do not implement psql's
 backslash commands or a Unix shell.
 
+## Extend a lesson when you need another session
+
+Every chapter has runnable browser SQL. Chapters marked **+ server** also include an optional,
+collapsed server extension. Open it only when you want the additional independent-session or
+server-tool experiment. Those copied commands run in a separate Docker/psql database, not the
+browser engine. The recovery chapter's checkpoint controls restore the actual in-browser database.
+
 ## Begin the investigation
 
 [Read a query plan →](./reading-plans.html). Keep a scratchpad for predictions and explanations;

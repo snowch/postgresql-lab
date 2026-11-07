@@ -12,10 +12,14 @@ self.onmessage = async ({ data }) => {
         fetch(initdbUrl).then(r=>r.arrayBuffer()).then(b=>WebAssembly.compile(b)),
         fetch(dataUrl).then(r=>r.blob()),
       ]);
-      db = await PGlite.create({ wasmModule, initdbWasmModule, fsBundle });
-      await db.exec(seed);
+      db = await PGlite.create({ wasmModule, initdbWasmModule, fsBundle, ...(data.snapshot ? {loadDataDir:data.snapshot} : {}) });
+      if (!data.snapshot) await db.exec(seed);
       const result = await db.query('SELECT version() AS version');
-      self.postMessage({ type:'ready', version:result.rows[0].version });
+      self.postMessage({ type:'ready', version:result.rows[0].version, restored:Boolean(data.snapshot) });
+    } else if (data.type === 'snapshot') {
+      if (db.isInTransaction()) throw new Error('Commit or roll back the open transaction before saving a checkpoint.');
+      const snapshot = await db.dumpDataDir('gzip');
+      self.postMessage({type:'snapshot',snapshot});
     } else {
       const results = await db.exec(data.sql);
       // Bound what crosses to the UI. PostgreSQL still executes the complete statement.

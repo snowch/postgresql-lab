@@ -7,7 +7,7 @@ Here, you investigate those failures with real PostgreSQL running in your browse
 
 <div class="status-card">
 <p><strong>Eighteen complete investigations.</strong></p>
-<p>Eleven browser chapters need no setup. Seven server chapters add independent sessions, recovery, and replication.</p>
+<p>Every chapter includes genuine PostgreSQL experiments in your browser. Seven chapters offer optional server extensions for additional behavior.</p>
 <p><a href="./getting-started.html">Open your laboratory →</a></p>
 </div>
 
@@ -37,10 +37,11 @@ stay open, while tablets and phones keep the lesson width until you request navi
 | Plans and indexes | [Read plans](./reading-plans.html), [design indexes](./designing-indexes.html), [diagnose estimates](./planner-estimates.html), [index tradeoffs](./index-tradeoffs.html). |
 | Data and queries | [Constraints](./constraints.html), [sets and windows](./advanced-sql.html), [JSONB](./jsonb.html), [partitioning](./partitioning.html). |
 | Storage and maintenance | [Row versions](./mvcc.html), [vacuum](./vacuum.html), [healthy statistics](./maintenance.html). |
-| Reliable applications · server | [Isolation](./transactions.html), [locks](./locks.html), [migrations](./migrations.html). |
-| Operations · server | [Observability](./observability.html), [backup and restore](./backup-recovery.html), [replication](./replication.html), [incident investigation](./production-incident.html). |
+| Reliable applications | [Isolation](./transactions.html), [locks](./locks.html), [migrations](./migrations.html). |
+| Operations | [Observability](./observability.html), [backup and restore](./backup-recovery.html), [replication](./replication.html), [incident investigation](./production-incident.html). |
 
-Use the [server laboratory setup](./server-setup.html) for the last two parts. Each chapter includes
+Start every part in the browser. Use the [server laboratory setup](./server-setup.html) only for optional
+independent-session, pg_dump, and streaming-replication extensions. Each chapter includes
 predictions, ordered experiments, interpretation, hints, a worked explanation, and a transfer task.
 
 ## Evidence you can change
@@ -49,6 +50,6 @@ Every SQL experiment runs against PostgreSQL through [PGlite](https://pglite.dev
 The output comes from your database. Edit a predicate, remove an index, or change the query's order
 and ask whether your explanation still holds.
 
-The browser runtime uses one connection. Multi-session contention, recovery, and replication belong
-to the [server track](./server-setup.html). Read [the runtime boundaries](./runtime.html) before translating timings
+The browser runtime uses one connection and supports a real checkpoint/restore exercise. Multi-session
+contention and streaming replication use the optional [server extensions](./server-setup.html). Read [the runtime boundaries](./runtime.html) before translating timings
 or operational observations to a production server.

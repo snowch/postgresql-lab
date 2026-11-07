@@ -1,5 +1,85 @@
 # Understand replication lag
 
+Identify the database's recovery role and inspect real WAL positions in the browser. Then optionally start a primary and standby to investigate actual replay lag.
+
+**You will learn to** distinguish an engine's role, a WAL byte position, and a replica's visible state.
+Prerequisites: transactions and recovery. This browser has one database instance; it does not
+simulate a second database or claim to stream WAL between workers.
+
+## Browser: identify the role
+
+Predict whether this database is currently replaying another primary's log, and whether receive
+and replay positions have meaningful values here.
+
+```sql
+SELECT pg_is_in_recovery() AS is_recovering,
+       pg_current_wal_lsn() AS current_wal_position,
+       pg_last_wal_receive_lsn() AS last_received,
+       pg_last_wal_replay_lsn() AS last_replayed;
+```
+
+The embedded instance is not a streaming standby. A false recovery flag and NULL receive/replay
+positions are real observations, not an error to replace with invented lag values. They identify
+which replication questions this particular process can answer.
+
+## Browser: compare byte positions
+
+An **LSN**, log sequence number, is a position in the write-ahead log, not a timestamp. Capture a
+position, make a committed change, and inspect the distance to the current position.
+
+```sql
+CREATE TABLE wal_observation (id integer PRIMARY KEY, captured pg_lsn NOT NULL);
+INSERT INTO wal_observation VALUES (1, pg_current_wal_insert_lsn());
+CREATE TABLE wal_payload (id integer PRIMARY KEY, note text);
+INSERT INTO wal_payload SELECT g, repeat('logged change ', 20) FROM generate_series(1, 1000) g;
+```
+
+```sql
+SELECT captured, pg_current_wal_insert_lsn() AS current_insert_position,
+       pg_wal_lsn_diff(pg_current_wal_insert_lsn(), captured) AS wal_bytes_since_capture
+FROM wal_observation;
+SELECT count(*) AS committed_rows FROM wal_payload;
+```
+
+The distance describes WAL position advancement in this instance. It can include catalog and other
+engine work, not only payload bytes. It does not measure network traffic, standby lag in seconds,
+or a guarantee that another server has applied anything. Do not convert the number directly into
+replication delay.
+
+## Explain the browser evidence
+
+<details><summary>Hint: identify the missing observation</summary>
+
+A primary's insertion position and a standby's replay position come from different participants.
+This page has only one participant until you start the optional server extension.
+
+</details>
+
+<details><summary>Worked explanation</summary>
+
+The role functions show a non-standby instance with no received/replayed upstream positions.
+Committed work advances its WAL insertion position, and pg_wal_lsn_diff compares byte positions.
+That is useful preparation for inspecting a real primary and standby, but it is not a replication
+experiment. The server extension supplies the missing second process and measures paused and resumed replay.
+
+</details>
+
+## Transfer the idea
+
+Write down the observations needed to answer: has my order committed, has its WAL arrived on a
+standby, and has that standby replayed it? Explain why a NULL receive position on this browser
+instance cannot be interpreted as zero replication lag. Use the optional extension to test those
+questions against two genuine server processes.
+
+## Optional server extension
+
+The browser investigation above is complete on its own. Use the [server setup](./server-setup.html)
+for the additional behavior below. Its copied commands run in a separate database and do not
+change your browser database.
+
+<details class="server-extension" id="server-extension">
+<summary>Open the streaming replication and promotion exercise</summary>
+
 A user commits an order on the primary and cannot immediately read it from a replica. Pause replay to separate received WAL from visible state.
 
 **You will learn to** inspect a standby, distinguish WAL receive and replay positions, and explain
@@ -117,3 +197,5 @@ docker compose -f server/compose.yml exec -T -u postgres db bash /lab/server/sta
 Next: [resolve a production incident](./production-incident.html).
 
 Primary source: [Warm standby and streaming replication](https://www.postgresql.org/docs/current/warm-standby.html).
+
+</details>

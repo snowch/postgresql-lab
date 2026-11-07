@@ -6,11 +6,15 @@ An advanced, hands-on journey through PostgreSQL, for developers growing into op
 
 ## Available now
 
-All eighteen chapters are complete. The first eleven run genuine PostgreSQL in the browser through
-PGlite: plans, indexes, statistics, constraints, advanced SQL, JSONB, partitioning, MVCC, vacuum, and
-maintenance. The last seven use an isolated real PostgreSQL server for multi-session transactions,
-locks, migrations, workload observability, logical backup/restore, streaming replication, and an
-incident investigation.
+All eighteen chapters include genuine PostgreSQL investigations running in the browser through
+PGlite. The final seven now cover transaction/savepoint behavior, real lock inspection, staged
+migrations, per-query workload and spill evidence, database checkpoint recovery, WAL-position
+inspection, and an end-to-end statistics/index incident.
+
+Optional collapsed server extensions add independent snapshots, contention, concurrent DDL,
+server-wide statistics, pg_dump/restore, and streaming replication. Separate PGlite workers are
+not presented as clients of a shared database or as a replication system. The replication browser
+lesson inspects actual WAL metadata; genuine replay lag and promotion require its server extension.
 
 Every lesson includes predictions, editable SQL or copyable session commands, evidence to inspect,
 hints, worked explanations, and transfer tasks. A disposable 60,000-row fixture loads per browser
@@ -19,7 +23,7 @@ page. Reset recreates it; navigation starts fresh. Copy/download preserve edited
 Use **Chapters** to show or hide navigation. Tablets and phones start with a closed drawer; wide
 desktops use an optional narrower rail. The site has no hosted database backend or progress storage.
 
-## Server investigations
+## Optional server investigations
 
 [Read the server setup](https://snowch.github.io/postgresql-lab/server-setup.html). With Docker Compose:
 
@@ -34,7 +38,9 @@ schema. It uses trust authentication for this isolated exercise; do not expose i
 an application. The server suite can be run with `npm run test:server` and leaves the service running.
 Stop it using `docker compose -f server/compose.yml down`.
 
-The recovery lesson tests a logical restore, not a complete PITR installation. Replication uses two
+The recovery browser lesson saves and restores a PGlite data-directory checkpoint. It can download
+the archive but does not import uploaded archives. The optional server extension tests a logical
+pg_dump restore, not a complete PITR installation. Streaming replication uses two
 server processes in one container and does not claim production failover safety.
 
 ## Build and run

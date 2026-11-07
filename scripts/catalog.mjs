@@ -21,15 +21,15 @@ export const groups = [
     ['maintenance', '11 · Keep plans healthy', 'chapters/11-maintenance.md', 'ready'],
   ]},
   { title: 'IV · Reliable applications', pages: [
-    ['transactions', '12 · Choose an isolation level', 'chapters/12-transactions.md', 'ready', 'server'],
-    ['locks', '13 · Investigate a blocked checkout', 'chapters/13-locks.md', 'ready', 'server'],
-    ['migrations', '14 · Change a busy database', 'chapters/14-migrations.md', 'ready', 'server'],
+    ['transactions', '12 · Choose an isolation level', 'chapters/12-transactions.md', 'ready', 'hybrid'],
+    ['locks', '13 · Investigate a blocked checkout', 'chapters/13-locks.md', 'ready', 'hybrid'],
+    ['migrations', '14 · Change a busy database', 'chapters/14-migrations.md', 'ready', 'hybrid'],
   ]},
   { title: 'V · Operate PostgreSQL', pages: [
-    ['observability', '15 · Find the expensive workload', 'chapters/15-observability.md', 'ready', 'server'],
-    ['backup-recovery', '16 · Prove you can recover', 'chapters/16-backup-recovery.md', 'ready', 'server'],
-    ['replication', '17 · Understand replication lag', 'chapters/17-replication.md', 'ready', 'server'],
-    ['production-incident', '18 · Resolve a production incident', 'chapters/18-production-incident.md', 'ready', 'server'],
+    ['observability', '15 · Find the expensive workload', 'chapters/15-observability.md', 'ready', 'hybrid'],
+    ['backup-recovery', '16 · Prove you can recover', 'chapters/16-backup-recovery.md', 'ready', 'hybrid'],
+    ['replication', '17 · Understand replication lag', 'chapters/17-replication.md', 'ready', 'hybrid'],
+    ['production-incident', '18 · Resolve a production incident', 'chapters/18-production-incident.md', 'ready', 'hybrid'],
   ]},
   { title: 'Reference', pages: [
     ['server-setup', 'Your server laboratory', 'appendices/server-setup.md', 'ready', 'server'],

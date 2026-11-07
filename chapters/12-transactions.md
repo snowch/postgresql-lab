@@ -1,5 +1,102 @@
 # Choose an isolation level
 
+A failed request must leave balances unchanged. Test atomicity and savepoints in this browser, then optionally investigate independent snapshots on a server.
+
+**You will learn to** distinguish commit, rollback, and partial rollback, and explain what a single
+connection can and cannot prove about isolation. Prerequisites: MVCC and basic transactions. No setup
+is needed for the browser investigation; every editor shares this page's connection.
+
+## Browser: make the change atomic
+
+A transfer moves money between two accounts. Predict what remains after both updates are rolled back.
+A **transaction** groups statements so their changes commit together or are abandoned together.
+
+```sql
+CREATE TABLE transfer_accounts (id integer PRIMARY KEY, balance integer NOT NULL CHECK (balance >= 0));
+INSERT INTO transfer_accounts VALUES (1, 100), (2, 100);
+```
+
+The fixture is now committed. Run the transaction separately so rollback cannot undo its setup.
+
+```sql
+BEGIN;
+UPDATE transfer_accounts SET balance = balance - 30 WHERE id = 1;
+UPDATE transfer_accounts SET balance = balance + 30 WHERE id = 2;
+SELECT * FROM transfer_accounts ORDER BY id;
+ROLLBACK;
+SELECT * FROM transfer_accounts ORDER BY id;
+```
+
+The first result reads this transaction's own changes. The second returns the original balances.
+Neither result demonstrates another session's visibility: both queries use this connection.
+
+## Browser: recover to a savepoint
+
+A **savepoint** marks a point inside a transaction to which you can roll back without abandoning
+its earlier work. Predict which update survives the following sequence.
+
+```sql
+BEGIN;
+UPDATE transfer_accounts SET balance = balance - 20 WHERE id = 1;
+SAVEPOINT before_credit;
+UPDATE transfer_accounts SET balance = balance + 200 WHERE id = 2;
+ROLLBACK TO SAVEPOINT before_credit;
+UPDATE transfer_accounts SET balance = balance + 20 WHERE id = 2;
+COMMIT;
+SELECT * FROM transfer_accounts ORDER BY id;
+SELECT sum(balance) AS total_balance FROM transfer_accounts;
+```
+
+The incorrect credit is undone, while the debit before the savepoint remains and the corrected
+credit commits. Verify both individual balances and the preserved total. Total alone would not
+prove the money reached the intended account.
+
+## Browser: identify the isolation boundary
+
+```sql
+SHOW transaction_isolation;
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SHOW transaction_isolation;
+ROLLBACK;
+```
+
+Selecting an isolation level is real SQL, but one connection cannot interleave independent
+transactions. Two PGlite instances have separate databases, so they do not reproduce two writers
+contending for the same rows. The extension below uses a real shared server for that experiment.
+
+## Explain the browser evidence
+
+<details><summary>Hint: trace the rollback boundary</summary>
+
+Mark the start of the transaction, the savepoint, and the commit. Ask which version each SELECT can
+see on this connection before reasoning about any other session.
+
+</details>
+
+<details><summary>Worked explanation</summary>
+
+Full rollback abandons both transfer updates. Rolling back to the savepoint abandons only the
+incorrect credit; the earlier debit remains, and the corrected credit can commit with it. These
+results establish transaction boundaries and read-your-own-writes behavior. They do not establish
+protection against concurrent write skew. That requires the independent-session schedule below.
+
+</details>
+
+## Transfer the idea
+
+Try a transfer where the debit is larger than the available balance. The CHECK should reject it;
+the lab rolls back any open transaction after a SQL error. Verify both balances before retrying.
+Explain why application retry logic must reevaluate the whole transaction's decision.
+
+## Optional server extension
+
+The browser investigation above is complete on its own. Use the [server setup](./server-setup.html)
+for the additional behavior below. Its copied commands run in a separate database and do not
+change your browser database.
+
+<details class="server-extension" id="server-extension">
+<summary>Open the independent-session server exercise</summary>
+
 Two doctors each see someone else on call and both leave. Reproduce the anomaly with independent snapshots, then prevent the invalid committed state.
 
 **You will learn to** reproduce write skew, distinguish Repeatable Read from Serializable, and define
@@ -130,3 +227,5 @@ arbitrary unseen rows.
 Next: [investigate a blocked checkout](./locks.html).
 
 Primary source: [Transaction isolation](https://www.postgresql.org/docs/current/transaction-iso.html).
+
+</details>

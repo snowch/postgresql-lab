@@ -104,6 +104,12 @@ left join retains orders without matches. Correct cardinality comes before choos
 
 </details>
 
+## Go deeper: how the engine works
+
+After fixing row multiplicity, which side of a hash join is held in memory and why does that choice matter? Read [Joins](https://snowch.github.io/query-engine-book/joins.html)
+in Query Engine Book. For GROUP BY state and group cardinality, also read [Hash aggregation](https://snowch.github.io/query-engine-book/hash-aggregation.html). Its DuckDB examples and teaching engine explain the general principle;
+PostgreSQL's operators and implementation details can differ. This reading is optional.
+
 ## Transfer the idea
 
 Add a fifth order with amount 100 and no events. Predict each total before rerunning it. Design a

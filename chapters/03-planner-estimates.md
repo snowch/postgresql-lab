@@ -186,6 +186,12 @@ can improve later join and access-path decisions, even when this isolated scan d
 
 </details>
 
+## Go deeper: how the engine works
+
+How can an estimate error change join order and the size of intermediate results? Read [Statistics, cost and join order](https://snowch.github.io/query-engine-book/statistics-cost-and-join-order.html)
+in Query Engine Book. Its DuckDB examples and teaching engine explain the general principle;
+PostgreSQL's operators and implementation details can differ. This reading is optional.
+
 ## Transfer the idea
 
 Imagine a table with postal code and city, or product category and supplier. Propose a query whose

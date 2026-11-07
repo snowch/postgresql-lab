@@ -1,5 +1,95 @@
 # Find the expensive workload
 
+A query returns few rows but performs substantial work. Inspect rows, buffers, and sort behavior in the browser before optionally ranking a server-wide workload.
+
+**You will learn to** distinguish result size from work performed and identify memory-driven sort
+spilling. Prerequisites: plans and aggregation. All browser output below comes from PostgreSQL;
+no cumulative server counters are synthesized.
+
+## Browser: count the work, not only the answer
+
+Predict how many output rows COUNT produces and how many table rows its scan must inspect.
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+SELECT count(*) FROM orders WHERE tenant_id = 42;
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+SELECT count(*) FROM orders WHERE tenant_id = 43;
+```
+
+The aggregate emits one row, while the scan filters its input. Compare the scan's actual output
+and removed rows. Repeating a query may change cache activity and elapsed time without changing
+the amount of data its access path must inspect. A pair of samples does not establish a latency distribution.
+
+## Browser: expose memory pressure
+
+`work_mem` is a memory budget used by individual sort/hash operations, not a cap on the whole database.
+Predict the sort method when a full sort has a small budget. Only EXPLAIN's plan rows are returned
+here, even though the underlying query processes all orders.
+
+```sql
+SET work_mem = '64kB';
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+SELECT id, payload FROM orders ORDER BY total_cents, id;
+```
+
+Look for the sort method and temporary-buffer activity. An external sort writes intermediate runs
+and merges them. In PGlite these temporary files use the embedded filesystem; their bytes are not
+measurements of a production disk. Depending on engine version and data shape, use the actual plan
+rather than requiring one printed memory or disk value.
+
+## Browser: change the memory budget
+
+```sql
+SET work_mem = '32MB';
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+SELECT id, payload FROM orders ORDER BY total_cents, id;
+RESET work_mem;
+```
+
+Compare the method and temporary work with the previous execution. Raising a budget can remove
+spilling for this fixture, but concurrent queries and multiple operators can multiply the total
+memory demand. A faster single sort does not establish a safe server-wide setting.
+
+## Explain the browser evidence
+
+<details><summary>Hint: keep four quantities separate</summary>
+
+Count result rows, inspected rows, held memory, and temporary reads/writes separately. Then ask
+which of those quantities the changed setting directly affects.
+
+</details>
+
+<details><summary>Worked explanation</summary>
+
+COUNT's small result hid the scan's larger input work. The low-budget sort can spill intermediate
+runs, while the larger budget can keep this fixture's sort in memory. Actual buffers and sort
+methods explain that difference more directly than a fixed timing threshold. These are per-query
+observations; the optional server extension adds call counts and cumulative workload statistics.
+
+</details>
+
+## Go deeper: how the engine works
+
+How does a memory budget turn a sort into temporary writes, reads, and merge passes? Read [Memory limits and spilling](https://snowch.github.io/query-engine-book/memory-limits-and-spilling.html)
+in Query Engine Book. Its DuckDB examples and teaching engine explain the general principle;
+PostgreSQL's operators and implementation details can differ. This reading is optional.
+
+## Transfer the idea
+
+Add LIMIT 20 to the full-sort query. Predict its held state and compare the plan. Explain why a
+small top-N structure can save memory while still reading all candidates. Then state which
+application counters you would need to decide whether this shape dominates an actual workload.
+
+## Optional server extension
+
+The browser investigation above is complete on its own. Use the [server setup](./server-setup.html)
+for the additional behavior below. Its copied commands run in a separate database and do not
+change your browser database.
+
+<details class="server-extension" id="server-extension">
+<summary>Open the independent-session server exercise</summary>
+
 One request looks cheap in isolation, but thousands of calls dominate the service's database time. Rank the workload before tuning one example.
 
 **You will learn to** distinguish cumulative cost from per-call latency, inspect waits, and connect a
@@ -108,3 +198,5 @@ Next: [prove you can recover](./backup-recovery.html).
 
 Primary sources: [pg_stat_statements](https://www.postgresql.org/docs/current/pgstatstatements.html) and
 [monitoring statistics](https://www.postgresql.org/docs/current/monitoring-stats.html).
+
+</details>

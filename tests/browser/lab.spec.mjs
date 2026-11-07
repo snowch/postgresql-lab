@@ -5,13 +5,38 @@ for(const [slug,,file,,runtime] of pages.filter(([s,,f,,r])=>r!=='server' && (s=
     const failures=[];page.on('pageerror',e=>failures.push(e.message));
     await page.goto(`${slug}.html`);
     await expect(page.locator('#db-status')).toContainText('Ready',{timeout:60000});
-    for(const cell of await page.locator('.sql-cell').all()){
+    const experiments=await page.locator('.sql-cell').all();
+    for(const [i,cell] of experiments.entries()){
+      if(slug==='backup-recovery' && i===1) {
+        await page.getByRole('button',{name:'Save checkpoint',exact:true}).click();
+        await expect(page.locator('#checkpoint-status')).toContainText('Checkpoint saved',{timeout:60000});
+        const download=page.waitForEvent('download');
+        await page.getByRole('button',{name:'Download checkpoint',exact:true}).click();
+        expect((await download).suggestedFilename()).toBe('postgresql-lab-checkpoint.tar.gz');
+      }
+      if(slug==='backup-recovery' && i===2) {
+        await expect(experiments[1].locator('.result')).toContainText('after checkpoint');
+        await page.getByRole('button',{name:'Restore checkpoint',exact:true}).click();
+        await expect(page.locator('#db-status')).toContainText('checkpoint restored',{timeout:60000});
+      }
       await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
       await expect(cell.locator('.result')).not.toHaveText('Running…',{timeout:45000});
       await expect(cell.locator('.result')).not.toContainText('SQL error');
       await expect(cell.locator('.result')).not.toBeEmpty();
     }
     expect(failures).toEqual([]);
+    if(slug==='backup-recovery') {
+      await expect(experiments[2].locator('.result')).toContainText('60000');
+      await expect(experiments[2].locator('.result')).toContainText('before checkpoint');
+      await expect(experiments[2].locator('.result')).not.toContainText('after checkpoint');
+      await page.screenshot({path:'test-results/browser-recovery.png',fullPage:true});
+      await page.locator('.snapshot-controls').evaluate(el=>el.scrollIntoView({block:'center'}));
+      await page.screenshot({path:'test-results/recovery-controls-desktop.png'});
+      await page.setViewportSize({width:390,height:844});
+      await page.locator('.snapshot-controls').evaluate(el=>el.scrollIntoView({block:'center'}));
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      await page.screenshot({path:'test-results/recovery-controls-mobile.png'});
+    }
     if(slug==='reading-plans'){
       await page.screenshot({path:'test-results/desktop-plans.png',fullPage:true});
       await page.evaluate(()=>scrollTo(0,0));
@@ -84,11 +109,35 @@ for(const width of [820,1024,1280]) {
     await page.screenshot({path:`test-results/navigation-${width}.png`});
   });
 }
-test('server lessons label copy-only sessions and do not start a browser database',async({page})=>{
+test('hybrid lessons keep server commands optional and separate from the browser database',async({page})=>{
   await page.goto('transactions.html');
-  await expect(page.locator('.eyebrow')).toContainText('Server investigation');
-  await expect(page.locator('.terminal-cell').first()).toContainText('Session observer');
-  await expect(page.locator('.run')).toHaveCount(0);
-  await expect(page.locator('#db-status')).toHaveCount(0);
-  await expect(page.getByRole('link',{name:'server setup',exact:true})).toBeVisible();
+  await expect(page.locator('.eyebrow')).toContainText('optional server extension');
+  await expect(page.locator('#db-status')).toContainText('Ready',{timeout:60000});
+  await expect(page.locator('.run').first()).toBeVisible();
+  const extension=page.locator('.server-extension');
+  await expect(extension).not.toHaveAttribute('open');
+  await expect(extension.locator('.terminal-cell').first()).not.toBeVisible();
+  await extension.locator('summary').first().click();
+  await expect(extension.locator('.terminal-cell').first()).toBeVisible();
+  await expect(extension.locator('.run')).toHaveCount(0);
+  await expect(page.getByRole('link',{name:'server setup',exact:true}).first()).toBeVisible();
+  await page.goto('locks.html#find-the-blocker');
+  await expect(page.locator('.server-extension')).toHaveAttribute('open','');
+});
+test('recovery controls reject open transactions and reset clears the checkpoint',async({page})=>{
+  await page.goto('backup-recovery.html');
+  await expect(page.locator('#db-status')).toContainText('Ready',{timeout:60000});
+  const cell=page.locator('.sql-cell').first();
+  await cell.locator('textarea').fill('BEGIN;');
+  await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
+  await expect(cell.locator('.result')).toContainText('Statement complete');
+  await page.getByRole('button',{name:'Save checkpoint',exact:true}).click();
+  await expect(page.locator('#checkpoint-status')).toContainText('Commit or roll back',{timeout:60000});
+  await page.getByRole('button',{name:'Save checkpoint',exact:true}).click();
+  await expect(page.locator('#checkpoint-status')).toContainText('Checkpoint saved',{timeout:60000});
+  await page.getByRole('button',{name:'Reset database',exact:true}).click();
+  await expect(page.locator('#db-status')).toContainText('Ready',{timeout:60000});
+  await expect(page.getByRole('button',{name:'Restore checkpoint',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Download checkpoint',exact:true})).toBeDisabled();
+  await expect(page.locator('#checkpoint-status')).toHaveText('No checkpoint saved.');
 });

@@ -11,6 +11,16 @@ for(const [slug,,file,status] of pages){
     assert.ok(!source.includes('**Outline.**'),`${file}: ready chapters must have full content`);
   }
   const html=await readFile(`dist/${slug}.html`,'utf8');
+  const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]);
+  assert.equal(new Set(ids).size,ids.length,`${slug}: unique anchors and control IDs`);
+  for(const [,fragment]of html.matchAll(/href="#([^"]+)"/g))assert.ok(ids.includes(fragment),`${slug}: local fragment ${fragment}`);
+  if(file.startsWith('chapters/')) {
+    assert.ok(source.includes('```sql\n'),`${file}: genuine browser SQL`);
+    if(source.includes('class="server-extension"')) {
+      assert.ok(html.includes('optional server extension'),`${slug}: hybrid runtime label`);
+      assert.ok(!html.includes('<details class="server-extension" id="server-extension" open'),`${slug}: server work starts optional and collapsed`);
+    }
+  }
   for(const match of html.matchAll(/(?:href|src)="([^"#]+)"/g)){
     if(/^(https?:|data:)/.test(match[1]))continue;
     await access(resolve(dirname(`dist/${slug}.html`),match[1].split('#')[0]));

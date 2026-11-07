@@ -104,6 +104,12 @@ protects `(id, created_at)` rather than `id` alone.
 
 </details>
 
+## Go deeper: how the engine works
+
+How does eliminating whole files before opening them compare with eliminating PostgreSQL partitions? Read [Where work happens](https://snowch.github.io/query-engine-book/where-work-happens.html)
+in Query Engine Book. Its DuckDB examples and teaching engine explain the general principle;
+PostgreSQL's operators and implementation details can differ. This reading is optional.
+
 ## Transfer the idea
 
 Add a March partition and insert a row at its lower boundary. Predict both the routing and a query's

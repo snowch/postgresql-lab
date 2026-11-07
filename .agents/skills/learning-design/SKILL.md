@@ -21,7 +21,7 @@ required by this skill.
 7. Make state explicit: experiments share a database within a page, page changes start fresh,
    restore SQL does not restore data, and reset discards database changes.
 8. Give outlines a purpose, prerequisites, planned experiment, evidence to inspect, and success
-   criteria. Label them honestly. Keep browser and future server tracks distinct.
+   criteria. Label them honestly. Keep browser investigations and optional server extensions distinct.
 9. Check the next chapter follows from the current question. Cite primary PostgreSQL documentation.
 
 Record a concise review of progression, executed evidence, transfer tasks, and limitations.

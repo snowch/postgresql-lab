@@ -96,6 +96,12 @@ value-frequency knowledge. A larger target is justified only if the current summ
 
 </details>
 
+## Go deeper: how the engine works
+
+Why can fresher estimates improve later join choices even when this scan remains unchanged? Read [Statistics, cost and join order](https://snowch.github.io/query-engine-book/statistics-cost-and-join-order.html)
+in Query Engine Book. Its DuckDB examples and teaching engine explain the general principle;
+PostgreSQL's operators and implementation details can differ. This reading is optional.
+
 ## Transfer the idea
 
 Compare a post-batch single-column error with a correlation error from chapter 3. Write a short

@@ -37,7 +37,7 @@ Session.prototype.resolve=null;
 console.log(docker(['up','-d','--wait']));
 docker(['exec','-T','db','psql','-U','postgres','-d','lab','-f','/lab/server/reset.sql']);
 for(const [slug,,file,,runtime] of pages){
-  if(runtime!=='server'||slug==='server-setup')continue;
+  if(!['server','hybrid'].includes(runtime)||slug==='server-setup')continue;
   docker(['exec','-T','db','psql','-U','postgres','-d','lab','-f','/lab/server/reset.sql']);
   const sessions=Object.fromEntries(['a','b','observer'].map(n=>[n,new Session(n)]));
   const pending={};

@@ -1,5 +1,102 @@
 # Investigate a blocked checkout
 
+A transaction can retain a lock after its last statement finishes. Observe your own locks in the browser before optionally tracing another session's wait on a server.
+
+**You will learn to** distinguish lock ownership from a blocking wait and connect lock release to
+transaction completion. Prerequisite: transaction boundaries. The browser uses one connection; it
+will not manufacture a second session or a deadlock.
+
+## Browser: acquire a table lock
+
+A relation lock protects a table against incompatible operations. Predict whether a lock acquired
+inside this transaction remains visible after the LOCK statement finishes.
+
+```sql
+CREATE TABLE lock_inventory (sku text PRIMARY KEY, stock integer NOT NULL);
+INSERT INTO lock_inventory VALUES ('book', 10);
+```
+
+The fixture is now committed. Run the transaction separately so rollback cannot undo its setup.
+
+```sql
+BEGIN;
+LOCK TABLE lock_inventory IN ACCESS EXCLUSIVE MODE;
+SELECT locktype, mode, granted
+FROM pg_locks
+WHERE relation = 'lock_inventory'::regclass;
+```
+
+Look for a granted `AccessExclusiveLock`. This strong table lock conflicts with other sessions'
+ordinary table access, but there is no other session here. Seeing `granted = true` establishes
+ownership, not a measured queue or a blocked client.
+
+## Browser: release and inspect
+
+Predict whether the relation lock remains after rollback. The predicate refers to the table's
+catalog identity without reading rows from that table.
+
+```sql
+ROLLBACK;
+SELECT locktype, mode, granted
+FROM pg_locks
+WHERE relation = 'lock_inventory'::regclass;
+```
+
+An empty result means this connection no longer holds that relation lock at the time of inspection.
+Queries can acquire their own locks while they execute, so inspect a specific relation rather than
+expecting the whole `pg_locks` view to become empty.
+
+## Browser: observe a row-changing statement
+
+Predict why updating one row also requires a table-level lock. Inspect ownership while the
+transaction remains open, then commit and verify the value.
+
+```sql
+BEGIN;
+UPDATE lock_inventory SET stock = stock - 1 WHERE sku = 'book';
+SELECT locktype, mode, granted FROM pg_locks
+WHERE relation = 'lock_inventory'::regclass;
+COMMIT;
+SELECT * FROM lock_inventory;
+```
+
+An UPDATE normally takes a `RowExclusiveLock` on the relation in addition to its row-version and
+transaction locking behavior. `pg_locks` is not a simple list of every row lock held. A relation
+lock's name does not mean the whole table is unavailable to every other writer.
+
+## Explain the browser evidence
+
+<details><summary>Hint: ownership is not contention</summary>
+
+A lock can be held without anyone waiting for it. Its mode defines conflicts; competing sessions
+and their requested modes determine whether those conflicts become waits.
+
+</details>
+
+<details><summary>Worked explanation</summary>
+
+LOCK acquired a real relation lock retained until rollback. The UPDATE also held a relation lock
+until commit, while the final query verified its business change. These observations explain
+transaction lifetime and lock modes. They do not measure blocking, prove absence of deadlocks,
+or show a second backend's row-lock wait. The optional extension adds that missing evidence.
+
+</details>
+
+## Transfer the idea
+
+Change the explicit lock mode to `ACCESS SHARE` and compare the observed mode. Consult the lock
+conflict table and predict which schema change would conflict with it. Verify that prediction
+using the optional server setup, rather than making this connection wait on an invented competitor.
+
+## Optional server extension
+
+The browser investigation above is complete on its own. Use the [server setup](./server-setup.html)
+for the additional behavior below. Its copied commands run in a separate database and do not
+change your browser database.
+
+<details class="server-extension" id="server-extension">
+<summary>Open the independent-session server exercise</summary>
+
 Checkout is waiting even though its UPDATE is small. Find the transaction holding the needed lock before changing the query.
 
 **You will learn to** observe a blocking chain, connect waits to transaction lifetime, and bound a
@@ -129,3 +226,5 @@ Next: [change a busy database](./migrations.html).
 
 Primary sources: [Explicit locking](https://www.postgresql.org/docs/current/explicit-locking.html) and
 [activity statistics](https://www.postgresql.org/docs/current/monitoring-stats.html).
+
+</details>

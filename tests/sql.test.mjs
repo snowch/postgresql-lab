@@ -8,12 +8,20 @@ for(const [slug,,file] of pages){
   const blocks=[...(await readFile(file,'utf8')).matchAll(/```sql\n([\s\S]*?)```/g)].map(m=>m[1]);
   if(!blocks.length)continue;
   test(`${slug}: all published SQL runs in order`,async()=>{
-    const db=await PGlite.create();
+    let db=await PGlite.create();
     try{
       await db.exec(seed);
       const {rows}=await db.query('SELECT count(*)::int AS n, count(DISTINCT tenant_id)::int AS tenants FROM orders');
       assert.deepEqual(rows,[{n:60000,tenants:100}]);
-      for(const sql of blocks)await db.exec(sql);
+      let checkpoint;
+      for(const [i,sql] of blocks.entries()) {
+        if(slug==='backup-recovery' && i===1) checkpoint=await db.dumpDataDir('gzip');
+        if(slug==='backup-recovery' && i===2) {
+          assert.equal((await db.query('SELECT count(*)::int AS n FROM orders')).rows[0].n,0);
+          await db.close();db=await PGlite.create({loadDataDir:checkpoint});
+        }
+        await db.exec(sql);
+      }
       const scalar=async query=>Object.values((await db.query(query)).rows[0])[0];
       if(slug==='constraints') {
         assert.equal(await scalar('SELECT count(*)::int FROM payments'),3);
@@ -34,6 +42,26 @@ for(const [slug,,file] of pages){
       if(slug==='mvcc') assert.equal(await scalar('SELECT sum(balance)::int FROM version_demo'),50150);
       if(slug==='vacuum') assert.equal(await scalar('SELECT count(*)::int FROM vacuum_demo'),10000);
       if(slug==='maintenance') assert.equal(await scalar('SELECT count(*)::int FROM orders_growth WHERE tenant_id=999'),15000);
+      if(slug==='transactions') assert.deepEqual((await db.query('SELECT id,balance FROM transfer_accounts ORDER BY id')).rows,[{id:1,balance:80},{id:2,balance:120}]);
+      if(slug==='locks') assert.equal(await scalar("SELECT stock FROM lock_inventory WHERE sku='book'"),9);
+      if(slug==='migrations') {
+        assert.equal(await scalar('SELECT count(*)::int FROM migration_orders'),3);
+        assert.equal(await scalar("SELECT convalidated FROM pg_constraint WHERE conname='migration_positive'"),true);
+      }
+      if(slug==='backup-recovery') {
+        assert.equal(await scalar('SELECT count(*)::int FROM orders'),60000);
+        assert.deepEqual((await db.query('SELECT id,note FROM browser_recovery_marker')).rows,[{id:1,note:'before checkpoint'}]);
+      }
+      if(slug==='replication') {
+        assert.equal(await scalar('SELECT pg_is_in_recovery()'),false);
+        assert.equal(await scalar('SELECT pg_last_wal_receive_lsn()'),null);
+        assert.ok(Number(await scalar('SELECT pg_wal_lsn_diff(pg_current_wal_insert_lsn(),captured) FROM wal_observation'))>0);
+      }
+      if(slug==='production-incident') {
+        assert.equal(await scalar('SELECT count(*)::int FROM incident_orders WHERE tenant_id=999'),15000);
+        const result=await db.query('SELECT id,created_at,total_cents FROM incident_orders WHERE tenant_id=999 ORDER BY created_at DESC LIMIT 20');
+        assert.deepEqual(result.rows,(await db.query('SELECT * FROM incident_expected ORDER BY created_at DESC')).rows);
+      }
     }finally{await db.close();}
   });
 }

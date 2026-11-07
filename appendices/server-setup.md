@@ -1,10 +1,12 @@
 # Your server laboratory
 
-Run the concurrency and operations lessons against a disposable PostgreSQL server with independent sessions.
+Extend the browser lessons with a disposable PostgreSQL server and independent sessions.
 
-The browser remains useful for plans and storage experiments. Chapters 12–18 use real server processes
-because one embedded connection cannot reproduce blocking, independent snapshots, or replication.
-Their code panels have **Copy**, not a browser Run button. No remote database is connected to this site.
+Every chapter starts with a runnable browser investigation. Chapters 12–18 also offer optional
+server extensions because one embedded connection cannot reproduce blocking, independent snapshots,
+or streaming replication. Expand **Optional server extension** to find those panels. They have **Copy**,
+not a browser Run button, and operate separately from the browser database. No remote database is
+connected to this site.
 
 ## Start the isolated server
 

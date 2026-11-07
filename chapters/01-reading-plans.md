@@ -143,6 +143,12 @@ prove no rows match. A small output does not imply a small search.
 
 </details>
 
+## Go deeper: how the engine works
+
+How do logical plans, physical operators, and execution profiles fit together? Read [The plan is the map](https://snowch.github.io/query-engine-book/the-plan-is-the-map.html)
+in Query Engine Book. Its DuckDB examples and teaching engine explain the general principle;
+PostgreSQL's operators and implementation details can differ. This reading is optional.
+
 ## Transfer the idea
 
 Change the query to `ORDER BY id DESC`. The primary-key index can supply that order. Predict whether

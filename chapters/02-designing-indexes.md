@@ -178,6 +178,12 @@ validation. Keep the smaller composite index as a candidate rather than assuming
 
 </details>
 
+## Go deeper: how the engine works
+
+What work does an ordered index avoid, and why can a top-N sort still consume all candidates? Read [Sorting and top-k](https://snowch.github.io/query-engine-book/sorting-and-top-k.html)
+in Query Engine Book. Its DuckDB examples and teaching engine explain the general principle;
+PostgreSQL's operators and implementation details can differ. This reading is optional.
+
 ## Transfer the idea
 
 Change the predicate to `status = 'pending'` and remove the tenant predicate. Does the current index
