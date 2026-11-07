@@ -73,8 +73,8 @@ backslash commands or a Unix shell.
 
 ## Extend a lesson when you need another session
 
-Every chapter has runnable browser SQL. Chapters marked **+ server** also include an optional,
-collapsed server extension. Open it only when you want the additional independent-session or
+Every chapter has runnable browser SQL. Chapters 12–18 also include an optional, collapsed
+server extension. Open it only when you want the additional independent-session or
 server-tool experiment. Those copied commands run in a separate Docker/psql database, not the
 browser engine. The recovery chapter's checkpoint controls restore the actual in-browser database.
 

@@ -20,8 +20,8 @@ write skew, and a granted relation lock does not demonstrate a second session wa
 
 ## UX review
 
-- Browser experiments appear before the server extension. A + server badge means additional optional
-  behavior, not a requirement to provision infrastructure before starting.
+- Browser experiments appear before the optional server extension. The menu explains once that all
+  chapters run in the browser and that server exercises extend chapters 12–18.
 - Server copy-only panels stay inside a collapsed disclosure. Browser Run buttons never dispatch
   their contents to Docker or a remote backend.
 - On-page navigation lists the browser sections and the optional extension entry, without flooding
@@ -70,3 +70,14 @@ been implemented or claimed as part of this change.
 - All seven independent-server extension schedules still pass unchanged on real PostgreSQL.
 
 These reviews were performed within one agent session; no independent audit is claimed.
+
+## Navigation wording follow-up
+
+The + server badges appeared on chapters containing substantial browser exercises and did not
+clearly communicate that the server content was optional. The UX review removes those per-chapter badges and uses one explanatory menu footer.
+The genuine server setup reference retains its Server label. The learning review keeps the page's
+browser-first label and the explicit optional extension boundary. No exercise behavior changes.
+
+The existing responsive navigation and hybrid-extension browser checks passed, all 24 pages and
+links were checked, and open phone and desktop menus were inspected. The existing full CI checks
+remain required before Pages deployment.
