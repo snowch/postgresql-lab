@@ -6,22 +6,36 @@ An advanced, hands-on journey through PostgreSQL, for developers growing into op
 
 ## Available now
 
-Three complete investigations run genuine PostgreSQL in the browser through PGlite:
+All eighteen chapters are complete. The first eleven run genuine PostgreSQL in the browser through
+PGlite: plans, indexes, statistics, constraints, advanced SQL, JSONB, partitioning, MVCC, vacuum, and
+maintenance. The last seven use an isolated real PostgreSQL server for multi-session transactions,
+locks, migrations, workload observability, logical backup/restore, streaming replication, and an
+incident investigation.
 
-1. **Read a query plan:** estimates, execution, filtering, sorting, limits, and buffers.
-2. **Design for the query:** single-column, composite, and covering indexes, visibility, and storage cost.
-3. **Diagnose an estimate:** correlated predicates, dependency statistics, and multicolumn MCV statistics.
+Every lesson includes predictions, editable SQL or copyable session commands, evidence to inspect,
+hints, worked explanations, and transfer tasks. A disposable 60,000-row fixture loads per browser
+page. Reset recreates it; navigation starts fresh. Copy/download preserve edited SQL.
 
-Each includes editable SQL, real output, predictions, hints, worked explanations, and transfer tasks.
-A disposable 60,000-row fixture loads per page. Reset stops execution and recreates it. Examples share
-a database within a page; navigation starts fresh. Copy and download preserve edited SQL.
+Use **Chapters** to show or hide navigation. Tablets and phones start with a closed drawer; wide
+desktops use an optional narrower rail. The site has no hosted database backend or progress storage.
 
-The remaining fifteen chapters are explicitly labelled outlines, covering data modeling, advanced SQL,
-JSONB, partitioning, MVCC, vacuum, maintenance, isolation, locks, migrations, observability, recovery,
-replication, and a final incident. Start, dataset, glossary, and runtime reference pages are also included.
+## Server investigations
 
-The browser uses one connection. Independent-session and operational scenarios are planned for a real
-PostgreSQL server. This initial release has no server backend, Jupyter dependency, or progress storage.
+[Read the server setup](https://snowch.github.io/postgresql-lab/server-setup.html). With Docker Compose:
+
+```sh
+docker compose -f server/compose.yml up -d --wait
+docker compose -f server/compose.yml exec -T db psql -U postgres -d lab -f /lab/server/reset.sql
+```
+
+Open independent psql sessions with `PGAPPNAME=lab-a`, `lab-b`, and `lab-observer` as documented in
+the setup page. The service uses PostgreSQL 17, publishes no ports, and keeps its fixture in the `lab`
+schema. It uses trust authentication for this isolated exercise; do not expose it or reuse it for
+an application. The server suite can be run with `npm run test:server` and leaves the service running.
+Stop it using `docker compose -f server/compose.yml down`.
+
+The recovery lesson tests a logical restore, not a complete PITR installation. Replication uses two
+server processes in one container and does not claim production failover safety.
 
 ## Build and run
 
@@ -43,12 +57,13 @@ project hosting. The engine's first download is substantial; no database service
 npm run check
 npx playwright install chromium
 npm run test:browser
+npm run test:server  # requires Docker Compose
 ```
 
-`check` builds all pages, verifies local links and outline structure, runs every published SQL block
-in order, and checks fixture invariants and estimate improvement. Browser tests execute every example
+`check` builds all pages, verifies local links and outline structure, runs every published browser SQL block
+in order, and checks fixture invariants and estimate improvement. Browser tests execute every browser example
 through the real WASM worker under `/postgresql-lab/`, then test error recovery, reset, mobile
-navigation, and overflow. They save desktop and mobile screenshots in `test-results/`.
+navigation, tablet/desktop collapse, and overflow. They save desktop and mobile screenshots in `test-results/`.
 
 To use a system Chromium, set `CHROMIUM_PATH=/path/to/chromium` for the browser command. CI installs
 Playwright's pinned Chromium. Tests do not grade exact costs, plan strings, or timing thresholds.
@@ -67,12 +82,13 @@ and [learning design skill](.agents/skills/learning-design/SKILL.md). The initia
 
 | Path | Purpose |
 | --- | --- |
-| `chapters/` | Three full investigations and fifteen honest outlines, in Markdown. |
-| `appendices/` | Home, onboarding, dataset, glossary, and runtime boundaries. |
+| `chapters/` | Eighteen full investigations, in Markdown. |
+| `appendices/` | Home, browser/server onboarding, dataset, glossary, and runtime boundaries. |
 | `scripts/catalog.mjs` | Ordered curriculum and publication status. |
 | `scripts/build.mjs` | Markdown renderer and static Vite build. |
 | `web/` | Accessible lesson UI, SQL cells, database worker, and fixture. |
-| `tests/` | Content, SQL semantics, and real-browser checks. |
+| `server/` | Isolated PostgreSQL Compose service, schema reset, and standby helper. |
+| `tests/` | Content, SQL semantics, real-browser checks, and published real-server schedules. |
 | `.agents/skills/` | Required UX and learning design reviews. |
 
 When adding a SQL block, ensure it runs in sequence from that page's fresh fixture. Keep VACUUM in

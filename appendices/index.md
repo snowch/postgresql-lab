@@ -6,8 +6,8 @@ A query slows down. An index changes nothing. A plan expects a handful of rows a
 Here, you investigate those failures with real PostgreSQL running in your browser.
 
 <div class="status-card">
-<p><strong>Start with three complete investigations.</strong></p>
-<p>Editable SQL, a repeatable dataset, and the evidence behind every explanation. No database setup or account required.</p>
+<p><strong>Eighteen complete investigations.</strong></p>
+<p>Eleven browser chapters need no setup. Seven server chapters add independent sessions, recovery, and replication.</p>
 <p><a href="./getting-started.html">Open your laboratory →</a></p>
 </div>
 
@@ -29,8 +29,19 @@ The full curriculum has five parts. Plans and indexes lead into data modeling an
 Storage and maintenance explain why updates change the database over time. Transactions and
 production operations connect query behavior to reliable applications.
 
-The sidebar links every planned chapter. **Outline** means the chapter describes a future experiment;
-its full lesson and executable work are not available yet. The three investigations above are complete.
+Every chapter is now available. Open **Chapters** to navigate; on wide desktops the optional rail can
+stay open, while tablets and phones keep the lesson width until you request navigation.
+
+| Part | Investigations |
+| --- | --- |
+| Plans and indexes | [Read plans](./reading-plans.html), [design indexes](./designing-indexes.html), [diagnose estimates](./planner-estimates.html), [index tradeoffs](./index-tradeoffs.html). |
+| Data and queries | [Constraints](./constraints.html), [sets and windows](./advanced-sql.html), [JSONB](./jsonb.html), [partitioning](./partitioning.html). |
+| Storage and maintenance | [Row versions](./mvcc.html), [vacuum](./vacuum.html), [healthy statistics](./maintenance.html). |
+| Reliable applications · server | [Isolation](./transactions.html), [locks](./locks.html), [migrations](./migrations.html). |
+| Operations · server | [Observability](./observability.html), [backup and restore](./backup-recovery.html), [replication](./replication.html), [incident investigation](./production-incident.html). |
+
+Use the [server laboratory setup](./server-setup.html) for the last two parts. Each chapter includes
+predictions, ordered experiments, interpretation, hints, a worked explanation, and a transfer task.
 
 ## Evidence you can change
 
@@ -39,5 +50,5 @@ The output comes from your database. Edit a predicate, remove an index, or chang
 and ask whether your explanation still holds.
 
 The browser runtime uses one connection. Multi-session contention, recovery, and replication belong
-to the planned server track. Read [the runtime boundaries](./runtime.html) before translating timings
+to the [server track](./server-setup.html). Read [the runtime boundaries](./runtime.html) before translating timings
 or operational observations to a production server.

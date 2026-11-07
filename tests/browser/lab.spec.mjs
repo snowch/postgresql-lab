@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
-for(const slug of ['getting-started','reading-plans','designing-indexes','planner-estimates']){
+import {pages} from '../../scripts/catalog.mjs';
+for(const [slug,,file,,runtime] of pages.filter(([s,,f,,r])=>r!=='server' && (s==='getting-started'||f.startsWith('chapters/')))){
   test(`${slug}: genuine browser WASM executes every experiment`,async({page})=>{
     const failures=[];page.on('pageerror',e=>failures.push(e.message));
     await page.goto(`${slug}.html`);
@@ -56,4 +57,38 @@ test('mobile navigation and SQL stay within viewport',async({page})=>{
   await page.screenshot({path:'test-results/mobile-plans.png',fullPage:true});
   await page.evaluate(()=>scrollTo(0,0));
   await page.screenshot({path:'test-results/mobile-viewport.png'});
+});
+
+for(const width of [820,1024,1280]) {
+  test(`navigation preserves reading width at ${width}px`,async({page})=>{
+    await page.setViewportSize({width,height:900});
+    await page.goto('index.html');
+    const menu=page.getByRole('button',{name:'Chapters',exact:true});
+    await expect(menu).toBeVisible();
+    await expect(menu).toHaveAttribute('aria-expanded',width<1200?'false':'true');
+    const before=await page.locator('main').boundingBox();
+    if(width<1200){
+      expect(before.width).toBeGreaterThan(width*.85);
+      await menu.click();
+      await expect(page.locator('#sidebar')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(menu).toBeFocused();
+    }else{
+      const rail=await page.locator('#sidebar').boundingBox();
+      expect(rail.width).toBeLessThanOrEqual(224);
+      await menu.click();
+    }
+    await expect(menu).toHaveAttribute('aria-expanded','false');
+    await expect(page.locator('#sidebar')).not.toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:`test-results/navigation-${width}.png`});
+  });
+}
+test('server lessons label copy-only sessions and do not start a browser database',async({page})=>{
+  await page.goto('transactions.html');
+  await expect(page.locator('.eyebrow')).toContainText('Server investigation');
+  await expect(page.locator('.terminal-cell').first()).toContainText('Session observer');
+  await expect(page.locator('.run')).toHaveCount(0);
+  await expect(page.locator('#db-status')).toHaveCount(0);
+  await expect(page.getByRole('link',{name:'server setup',exact:true})).toBeVisible();
 });

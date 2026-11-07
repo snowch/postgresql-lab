@@ -18,9 +18,9 @@ longer on a slow connection. The browser needs current JavaScript, WebAssembly, 
 The browser database has one connection and does not reproduce independent PostgreSQL backend
 processes. It cannot demonstrate multi-session blocking, realistic deadlocks, connection pooling,
 replication, failover, backup recovery, server background maintenance, or operating-system tuning.
-Those lessons are marked as planned server work in the curriculum.
+Those lessons use the separate [server laboratory](./server-setup.html), with copied commands and independent sessions.
 
-Some PostgreSQL extensions depend on native libraries or facilities unavailable in PGlite. A planned
+The eleven browser chapters run their published SQL in PGlite. Some PostgreSQL extensions depend on native libraries or facilities unavailable in PGlite. A new
 lesson must verify extension availability before promising a browser experiment.
 
 ## How to interpret measurements

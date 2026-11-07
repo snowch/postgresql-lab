@@ -1,0 +1,18 @@
+name: postgresql-lab
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: lab
+      POSTGRES_HOST_AUTH_METHOD: trust
+    command: [postgres, -c, shared_preload_libraries=pg_stat_statements, -c, wal_level=replica, -c, max_wal_senders=5, -c, max_replication_slots=5, -c, track_io_timing=on]
+    volumes:
+      - lab-data:/var/lib/postgresql/data
+      - ..:/lab:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d lab]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+volumes:
+  lab-data:

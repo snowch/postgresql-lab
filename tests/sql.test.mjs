@@ -14,6 +14,26 @@ for(const [slug,,file] of pages){
       const {rows}=await db.query('SELECT count(*)::int AS n, count(DISTINCT tenant_id)::int AS tenants FROM orders');
       assert.deepEqual(rows,[{n:60000,tenants:100}]);
       for(const sql of blocks)await db.exec(sql);
+      const scalar=async query=>Object.values((await db.query(query)).rows[0])[0];
+      if(slug==='constraints') {
+        assert.equal(await scalar('SELECT count(*)::int FROM payments'),3);
+        assert.equal(await scalar('SELECT count(*)::int FROM payments WHERE amount IS NULL OR amount<0'),0);
+        assert.equal(await scalar('SELECT count(*)::int FROM billing_accounts WHERE id=9'),1);
+      }
+      if(slug==='advanced-sql') {
+        assert.equal(await scalar('SELECT sum(amount)::int FROM demo_orders'),800);
+        assert.equal(await scalar('SELECT sum(amount)::int FROM demo_orders o WHERE EXISTS(SELECT 1 FROM demo_events e WHERE e.order_id=o.id)'),300);
+      }
+      if(slug==='jsonb') assert.equal(await scalar("SELECT count(*)::int FROM order_metadata WHERE metadata->>'channel'='direct'"),1);
+      if(slug==='partitioning') {
+        const kept=await scalar('SELECT count(*)::int FROM orders_by_month');
+        const detached=await scalar('SELECT count(*)::int FROM orders_jan');
+        assert.equal(kept+detached,60000);
+        assert.equal(kept,await scalar("SELECT count(*)::int FROM orders WHERE created_at >= timestamp '2025-02-01'"));
+      }
+      if(slug==='mvcc') assert.equal(await scalar('SELECT sum(balance)::int FROM version_demo'),50150);
+      if(slug==='vacuum') assert.equal(await scalar('SELECT count(*)::int FROM vacuum_demo'),10000);
+      if(slug==='maintenance') assert.equal(await scalar('SELECT count(*)::int FROM orders_growth WHERE tenant_id=999'),15000);
     }finally{await db.close();}
   });
 }

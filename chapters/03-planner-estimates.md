@@ -203,7 +203,7 @@ query and refresh statistics after meaningful data changes. Statistics are estim
 Choose the summary that describes that relationship, then verify it against execution.
 
 You have completed the first vertical slice. Continue exploring the editors or inspect the
-[planned index tradeoffs investigation](./index-tradeoffs.html).
+[index tradeoffs investigation](./index-tradeoffs.html).
 
 Primary sources: [Planner statistics](https://www.postgresql.org/docs/current/planner-stats.html),
 [extended statistics examples](https://www.postgresql.org/docs/current/multivariate-statistics-examples.html),

@@ -1,38 +1,114 @@
 # Change a busy database
 
-> **Outline.** This chapter is planned. The full explanation, fixture, executable examples, and worked solution are not available yet.
+A schema deployment waits behind an ordinary transaction. Bound that wait and split validation from enforcement before retrying the migration.
 
-## The question
+**You will learn to** observe DDL blocking, stage a constraint, and build an index without wrapping
+CONCURRENTLY in a transaction. Prerequisites: locks, constraints, and indexes. Use fresh
+[server sessions](./server-setup.html). This lab has no browser Run controls.
 
-A schema deployment blocks order creation.
+## Reproduce the blocking change
 
-The goal is to plan schema changes around lock duration, validation, and recovery.
+A reads the fixture and keeps its transaction open. A plain SELECT takes a table lock that normally
+coexists with writes but conflicts with many schema changes.
 
-## Before you start
+```sql-a
+BEGIN;
+SELECT count(*) FROM lab.orders;
+```
 
-Prerequisites: Locks, constraints, and indexes.
+B tries an ALTER with a short lock timeout. Predict whether this small metadata change must wait.
 
-Runtime: a real PostgreSQL server with independent sessions. The single-connection browser runtime cannot reproduce this investigation.
+```sql-b
+-- expect-error: 55P03
+SET lock_timeout = '300ms';
+ALTER TABLE lab.orders ADD COLUMN reviewed boolean;
+```
 
-## Planned investigation
+```sql-observer
+SELECT application_name, state, xact_start
+FROM pg_stat_activity WHERE application_name = 'lab-a';
+```
 
-Compare index builds on a busy table, stage constraint validation, and bound waits with timeouts.
+```sql-a
+COMMIT;
+```
 
-The finished lesson will ask you to predict the outcome, run and edit the examples, inspect the evidence,
-and test a competing explanation. It will include a fresh fixture and explicit recovery steps.
+```sql-b
+ALTER TABLE lab.orders ADD COLUMN reviewed boolean;
+RESET lock_timeout;
+```
 
-## Evidence to inspect
+The timeout prevented an unbounded wait. A waiting DDL statement can also cause later requests to
+queue behind it; inspecting only the original reader can miss the growing impact. Lock behavior is
+operation-specific, so measure the actual command on a representative server version.
 
-Lock modes, waiting sessions, invalid indexes, and rollback or retry states.
+## Enforce new writes before scanning old rows
 
-## A successful explanation
+A CHECK added `NOT VALID` enforces future inserted or updated rows while deferring the initial scan
+of existing rows. It does not mean the rule is disabled.
 
-Write a staged migration and recovery plan grounded in observed blocking.
+```sql-b
+ALTER TABLE lab.orders ADD CONSTRAINT orders_positive
+CHECK (total_cents >= 0) NOT VALID;
+SELECT conname, convalidated FROM pg_constraint
+WHERE conrelid = 'lab.orders'::regclass AND conname = 'orders_positive';
+ALTER TABLE lab.orders VALIDATE CONSTRAINT orders_positive;
+SELECT conname, convalidated FROM pg_constraint
+WHERE conrelid = 'lab.orders'::regclass AND conname = 'orders_positive';
+```
 
-The finished exercises will include hints, a worked explanation, and a transfer task. Plan choices and
-execution times will be treated as observations, not fixed answers.
+Validation scans existing rows using a less restrictive lock than many ALTER operations. It still
+uses resources and takes locks; it is not guaranteed free of application impact. A typical rollout
+adds the rule, repairs old data in bounded batches if necessary, then validates. Plan how to resume
+if validation fails.
 
-## Read ahead
+## Build an index during writes
 
-[PostgreSQL documentation](https://www.postgresql.org/docs/current/sql-altertable.html).
-Return to the [complete browser investigations](./reading-plans.html) to run SQL today.
+The next statement must run as its own command, outside an explicit transaction. Many migration
+frameworks wrap files in transactions by default, so configure this step deliberately.
+
+```sql-b
+CREATE INDEX CONCURRENTLY orders_tenant_online ON lab.orders (tenant_id);
+```
+
+```sql-observer
+SELECT indexrelid::regclass AS index_name, indisready, indisvalid
+FROM pg_index WHERE indexrelid = 'lab.orders_tenant_online'::regclass;
+```
+
+Concurrent creation avoids blocking normal writes for the full build, but it can wait for transactions
+and requires additional work. An interrupted or failed build can leave an invalid index. Verify
+`indisvalid`; do not treat the existence of a name as success. Investigate the failure before dropping
+an invalid artifact and retrying outside a transaction. Only one concurrent build can run on a given
+table at a time.
+
+## Explain a rollout
+
+<details><summary>Hint</summary>
+
+For each step, state its lock, its scan/work, the evidence of completion, and a safe retry state.
+
+</details>
+
+<details><summary>Worked explanation</summary>
+
+The reader's open transaction blocked ALTER even though neither query was expensive. A lock timeout
+bounded the deployment's wait. NOT VALID separated new-write enforcement from checking existing data.
+A concurrent index build reduced write blocking but needed a standalone execution and validity check.
+Rollback is not one universal command: a failed validation, a timed-out ALTER, and an invalid index
+leave different states.
+
+</details>
+
+## Transfer the idea
+
+Design a required-column rollout for a busy table: introduce a compatible column, deploy writers,
+backfill in bounded batches, verify existing rows, then enforce the final rule. Name the failure
+and resume condition for each stage. Explain why one large UPDATE inside a long migration transaction
+can recreate the blocking problem you tried to avoid.
+
+**Takeaway:** Treat schema changes as observable stages with bounded waits and explicit completion checks.
+Next: [find the expensive workload](./observability.html).
+
+Primary sources: [ALTER TABLE](https://www.postgresql.org/docs/current/sql-altertable.html) and
+[CREATE INDEX](https://www.postgresql.org/docs/current/sql-createindex.html).

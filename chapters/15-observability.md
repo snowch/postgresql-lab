@@ -1,38 +1,110 @@
 # Find the expensive workload
 
-> **Outline.** This chapter is planned. The full explanation, fixture, executable examples, and worked solution are not available yet.
+One request looks cheap in isolation, but thousands of calls dominate the service's database time. Rank the workload before tuning one example.
 
-## The question
+**You will learn to** distinguish cumulative cost from per-call latency, inspect waits, and connect a
+normalized statement to a concrete plan. Prerequisites: plans and lock diagnosis. Use a fresh
+[server fixture](./server-setup.html), with the included `pg_stat_statements` preload configuration.
 
-A fleet becomes slow while individual test queries look healthy.
+## Start a controlled observation window
 
-The goal is to distinguish query latency, call volume, resource use, and waiting.
+`pg_stat_statements` aggregates execution statistics for normalized statements. Similar statements
+with different literal constants can share an entry. Reset below affects statistics for the whole
+isolated server; do not use this reset casually on a shared system.
 
-## Before you start
+```sql-observer
+SELECT pg_stat_statements_reset();
+SELECT count(*) FROM lab.orders WHERE tenant_id = 42;
+SELECT count(*) FROM lab.orders WHERE tenant_id = 43;
+SELECT count(*) FROM lab.orders WHERE tenant_id = 44;
+```
 
-Prerequisites: Plans and lock diagnosis.
+Predict how many normalized entries these three counts create. The constants differ, but the query
+shape is the same. Now add a different shape, executed once.
 
-Runtime: a real PostgreSQL server with independent sessions. The single-connection browser runtime cannot reproduce this investigation.
+```sql-a
+SELECT sum(total_cents) FROM lab.orders WHERE status = 'pending';
+```
 
-## Planned investigation
+## Rank cumulative work
 
-Run a mixed workload and use server statistics to locate cumulative cost and inspect representative plans.
+```sql-observer
+SELECT calls, round(total_exec_time::numeric, 3) AS total_ms,
+       round(mean_exec_time::numeric, 3) AS mean_ms,
+       rows, shared_blks_hit, shared_blks_read, query
+FROM pg_stat_statements
+WHERE query LIKE '%lab.orders%'
+  AND query NOT LIKE '%pg_stat_statements%'
+ORDER BY total_exec_time DESC;
+```
 
-The finished lesson will ask you to predict the outcome, run and edit the examples, inspect the evidence,
-and test a competing explanation. It will include a fresh fixture and explicit recovery steps.
+Find the count shape and its call count. The sum and count statements may exchange rank across
+machines. `total_exec_time` accumulates server execution time; `mean_exec_time` is an average, not
+a tail-latency percentile. The `rows` field reports rows emitted or affected, not every row inspected.
+A COUNT returning one result can still scan thousands of source rows.
 
-## Evidence to inspect
+These counters are cumulative since reset or entry creation. Real diagnosis needs a before/after
+window, workload context, and awareness that entries may be evicted. Cumulative execution time is
+not a direct measure of CPU time or elapsed wall time for the entire service.
 
-pg_stat_statements where installed, activity, wait events, and repeated workload measurements.
+## Connect the aggregate to a plan
 
-## A successful explanation
+Choose a representative parameter and inspect its plan. Predict whether another tenant with a much
+larger population could need a different path.
 
-Explain the dominant workload and propose a measurable intervention.
+```sql-observer
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+SELECT count(*) FROM lab.orders WHERE tenant_id = 42;
+CREATE INDEX observability_tenant ON lab.orders (tenant_id);
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+SELECT count(*) FROM lab.orders WHERE tenant_id = 42;
+```
 
-The finished exercises will include hints, a worked explanation, and a transfer task. Plan choices and
-execution times will be treated as observations, not fixed answers.
+A normalized entry can combine parameters with different selectivity. One sampled plan does not
+explain every call. EXPLAIN ANALYZE adds its own execution and instrumentation; account for that
+when interpreting a short observation window.
 
-## Read ahead
+## Look for waiting, too
 
-[PostgreSQL documentation](https://www.postgresql.org/docs/current/monitoring-stats.html).
-Return to the [complete browser investigations](./reading-plans.html) to run SQL today.
+```sql-observer
+SELECT application_name, state, wait_event_type, wait_event,
+       clock_timestamp() - xact_start AS transaction_age,
+       pg_blocking_pids(pid) AS blockers
+FROM pg_stat_activity
+WHERE datname = current_database() AND backend_type = 'client backend'
+ORDER BY application_name;
+```
+
+An idle client waiting for its next command is different from an active statement waiting for a
+lock. Sampled activity and wait events help distinguish them. A query with modest execution cost
+can still participate in a latency incident through lock ownership and long transaction lifetime.
+
+## Explain the next measurement
+
+<details><summary>Hint</summary>
+
+State the observation window, call count, work per call, and waiting separately. A single average
+cannot stand in for all four.
+
+</details>
+
+<details><summary>Worked explanation</summary>
+
+The literal tenant predicates normalize to one statement shape with multiple calls. Rank total cost
+to find aggregate impact, then inspect representative plans and parameter distributions. Use activity
+and blockers to investigate waits. Verify an intervention with comparable workload deltas rather
+than comparing a warm one-off query with an earlier cumulative total.
+
+</details>
+
+## Transfer the idea
+
+Design a five-minute measurement for a high-volume endpoint. Name the counters collected at both
+boundaries, request counts from the application, and one tail-latency metric. Explain how you would
+notice that a faster query is being called twice as often after a release.
+
+**Takeaway:** Query shape, frequency, parameter distribution, and waits together explain workload cost.
+Next: [prove you can recover](./backup-recovery.html).
+
+Primary sources: [pg_stat_statements](https://www.postgresql.org/docs/current/pgstatstatements.html) and
+[monitoring statistics](https://www.postgresql.org/docs/current/monitoring-stats.html).

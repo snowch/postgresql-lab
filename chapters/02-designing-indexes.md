@@ -188,8 +188,8 @@ and inspect a plan. A useful answer considers `(status, created_at DESC)` or a p
 ## What this cannot tell you
 
 A single-user browser experiment does not measure lock contention, write throughput, cache pressure
-across many queries, or production disk behavior. The next planned chapter, [Pay for your indexes](./index-tradeoffs.html),
-will investigate index alternatives and maintenance in more depth.
+across many queries, or production disk behavior. The next chapter, [Pay for your indexes](./index-tradeoffs.html),
+investigates index alternatives and maintenance in more depth.
 
 **Takeaway:** Match an index to the query's search and ordering requirements, then account for visibility,
 storage, and writes. A useful index still depends on useful estimates. [Diagnose an estimate →](./planner-estimates.html).

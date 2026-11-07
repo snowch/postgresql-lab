@@ -7,7 +7,8 @@
     "dev": "npm run build && vite preview --host 0.0.0.0",
     "preview": "vite preview --host 0.0.0.0",
     "check": "npm run build && node tests/content.mjs && node --test tests/sql.test.mjs",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:server": "node tests/server.mjs"
   },
   "repository": {
     "type": "git",

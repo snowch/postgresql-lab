@@ -21,9 +21,9 @@ agents are optional only when the user authorizes them.
 - Run genuine PostgreSQL through PGlite. Never fabricate plans or measured timings.
 - Browser investigations must be runnable in order from a fresh reset, with editable SQL.
 - Clearly mark unfinished chapters as outlines. Do not imply a planned exercise exists.
-- Explain single-connection WASM limits. Server exercises belong in the planned server track.
+- Explain single-connection WASM limits. Server exercises use the separate Docker Compose server track.
 - Define terms when introduced. Prefer plain language, concrete causes, and short paragraphs.
 - Keep shared dataset generation in `web/seed.sql` and navigation in `scripts/catalog.mjs`.
 - Deploy a static site through GitHub Pages Actions, supporting the `/postgresql-lab/` base path.
-- Before shipping: `npm run check` and `npm run test:browser`. Inspect desktop and mobile screenshots
+- Before shipping: `npm run check`, `npm run test:browser`, and `npm run test:server` when server material changes. Inspect desktop and mobile screenshots
   when the rendered experience changes. Fix material usability or learning issues you find.

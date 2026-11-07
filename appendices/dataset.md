@@ -39,4 +39,5 @@ Reset between chapters by recreating the isolated database or dropping the fixtu
 it again. Do not load this schema into an application database: it uses an unqualified `orders` table.
 
 The server's PostgreSQL version and settings may differ from PGlite. Record them when comparing results.
-The future server track will add reproducible multi-session tooling; it is not implemented yet.
+The [server laboratory](./server-setup.html) provides a Docker Compose setup and ordered multi-session exercises.
+It loads the same fixture into the `lab` schema instead of `public`.

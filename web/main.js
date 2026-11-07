@@ -1,10 +1,27 @@
 const menu = document.querySelector('#menu');
-menu.addEventListener('click', () => {
-  const open = menu.getAttribute('aria-expanded') !== 'true';
+const sidebar = document.querySelector('#sidebar');
+const wide = matchMedia('(min-width: 1200px)');
+function setNavigation(open) {
   menu.setAttribute('aria-expanded', String(open));
   document.body.classList.toggle('nav-open', open);
+  sidebar.inert = !open;
+  if (open) sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({block:'nearest'});
+}
+setNavigation(wide.matches);
+menu.addEventListener('click',()=>setNavigation(menu.getAttribute('aria-expanded')!=='true'));
+wide.addEventListener('change',()=>setNavigation(wide.matches));
+document.querySelector('#nav-backdrop').addEventListener('click',()=>setNavigation(false));
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape' && menu.getAttribute('aria-expanded')==='true') {
+    setNavigation(false);menu.focus();
+  }
 });
-document.querySelector('[aria-current="page"]')?.scrollIntoView({block:'nearest'});
+document.querySelectorAll('.terminal-cell .copy').forEach(button=>button.addEventListener('click',async()=>{
+  const code=button.closest('.terminal-cell').querySelector('code');
+  try {await navigator.clipboard.writeText(code.textContent);button.textContent='Copied';}
+  catch {const range=document.createRange();range.selectNodeContents(code);getSelection().removeAllRanges();getSelection().addRange(range);button.textContent='Select and copy';}
+  setTimeout(()=>button.textContent='Copy',2000);
+}));
 const cells = [...document.querySelectorAll('.sql-cell')];
 if (cells.length) startLab();
 function startLab() {
