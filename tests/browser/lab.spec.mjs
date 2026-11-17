@@ -20,8 +20,8 @@ for(const [slug,,file,,runtime] of pages.filter(([s,,f,,r])=>r!=='server' && (s=
         await expect(page.locator('#db-status')).toContainText('checkpoint restored',{timeout:60000});
       }
       await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
-      await expect(cell.locator('.result')).not.toHaveText('Running…',{timeout:45000});
-      await expect(cell.locator('.result')).not.toContainText('SQL error');
+      await expect(cell.getByRole('button',{name:'Run SQL',exact:true})).toBeEnabled({timeout:45000});
+      await expect(cell.locator('.query-error')).toBeHidden();
       await expect(cell.locator('.result')).not.toBeEmpty();
     }
     expect(failures).toEqual([]);
@@ -38,17 +38,28 @@ for(const [slug,,file,,runtime] of pages.filter(([s,,f,,r])=>r!=='server' && (s=
       await page.screenshot({path:'test-results/recovery-controls-mobile.png'});
     }
     if(slug==='reading-plans'){
+      await expect(experiments[3].locator('.result-note')).toHaveText('Query plan');
       await page.screenshot({path:'test-results/desktop-plans.png',fullPage:true});
       await page.evaluate(()=>scrollTo(0,0));
       await page.screenshot({path:'test-results/desktop-viewport.png'});
       const cell=page.locator('.sql-cell').first();
+      const previous=await cell.locator('.result').innerHTML();
+      const original=await cell.locator('textarea').inputValue();
       await cell.locator('textarea').fill('SELECT broken_column FROM orders;');
       await expect(cell.locator('.execution-note')).toContainText('SQL edited');
       await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
-      await expect(cell.locator('.result')).toContainText('SQL error');
+      await expect(cell.locator('.query-error')).toContainText('SQL error');
+      expect(await cell.locator('.result').innerHTML()).toBe(previous);
+      await expect(cell.locator('.execution-note')).toContainText('last successful SQL');
       await cell.locator('textarea').fill('SELECT 42 AS recovered;');
+      await cell.getByRole('button',{name:'Restore SQL',exact:true}).click();
+      await expect(cell.locator('textarea')).toHaveValue(original);
+      await cell.getByRole('button',{name:'Recover edit',exact:true}).click();
+      await expect(cell.locator('textarea')).toHaveValue('SELECT 42 AS recovered;');
+      await expect(cell.locator('textarea')).toBeFocused();
       await cell.locator('textarea').press('Control+Enter');
       await expect(cell.locator('.result')).toContainText('recovered');
+      await expect(cell.locator('.query-error')).toBeHidden();
       await cell.locator('textarea').fill('DELETE FROM orders;');
       await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
       await expect(cell.locator('.result')).toContainText('60000 affected');
@@ -76,12 +87,32 @@ test('mobile navigation and SQL stay within viewport',async({page})=>{
   await page.locator('#sidebar').getByRole('link',{name:'01 · Read a query plan',exact:true}).click();
   await expect(page.locator('#db-status')).toContainText('Ready',{timeout:60000});
   const cell=page.locator('.sql-cell').first();
+  expect(await page.locator('#runtime-bar').evaluate(el=>el.nextElementSibling.classList.contains('sql-cell'))).toBe(true);
+  await expect(cell.locator('.cell-status')).toBeHidden();
   await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
   await expect(cell.locator('.result')).toContainText('orders_pkey');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:'test-results/mobile-plans.png',fullPage:true});
   await page.evaluate(()=>scrollTo(0,0));
   await page.screenshot({path:'test-results/mobile-viewport.png'});
+});
+
+test('a running SQL cell keeps local feedback and restores keyboard focus',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('reading-plans.html');
+  const cell=page.locator('.sql-cell').first();
+  const run=cell.getByRole('button',{name:'Run SQL',exact:true});
+  await expect(run).toBeEnabled({timeout:60000});
+  await cell.locator('textarea').fill('SELECT 1 AS before;');
+  await run.click();
+  await expect(cell.locator('.result')).toContainText('before');
+  await cell.locator('textarea').fill('SELECT 2 AS after FROM pg_sleep(1);');
+  await run.press('Enter');
+  await expect(cell.locator('.cell-status')).toHaveText('Executing SQL…');
+  await expect(cell.locator('.cell-status')).toBeFocused();
+  await expect(cell.locator('.result')).toContainText('before');
+  await expect(cell.locator('.result')).toContainText('after');
+  await expect(run).toBeFocused();
 });
 
 for(const width of [820,1024,1280]) {
