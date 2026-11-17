@@ -81,3 +81,28 @@ browser-first label and the explicit optional extension boundary. No exercise be
 The existing responsive navigation and hybrid-extension browser checks passed, all 24 pages and
 links were checked, and open phone and desktop menus were inspected. The existing full CI checks
 remain required before Pages deployment.
+
+## Query-plan transfer and editor recovery
+
+Applied the learning-design and UX reviews to the query-plan transfer and the
+shared browser workbench. The transfer names the measured query and keeps its
+tenant and limit fixed. It asks the learner to record the scan type and
+filter rejections before changing the sort key. A Chromium run against the
+synthetic fixture observed a sequential scan before the edit and a backward
+primary-key index scan after it. The exercise asks learners to inspect their own
+plan. [PostgreSQL EXPLAIN documentation](https://www.postgresql.org/docs/current/using-explain.html)
+
+The database status and tools precede the first editor. Each cell shows the
+reason for waiting beside Run SQL. Keyboard activation keeps focus at the cell,
+and a SQL error appears separately from the last successful result. A visible
+note identifies results produced by earlier SQL or before later database
+activity. Query plans have a plan label, so the number of displayed plan lines
+cannot be confused with a query's returned rows.
+
+Recover edit brings back the last replaced SQL in that editor for the current
+page. Reset database keeps edited SQL and its recovery copy while rebuilding
+the fixture. Copy SQL and Download SQL remain the portable options. Phone and
+desktop Chromium walkthroughs exercised the original and edited plan, readiness,
+keyboard focus, error and plan retention, SQL recovery after database reset,
+and download. These are functional and author checks. Learning effectiveness
+remains unmeasured.

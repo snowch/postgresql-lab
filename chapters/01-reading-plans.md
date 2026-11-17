@@ -4,7 +4,7 @@ The order history endpoint slows down as the table grows. Find where PostgreSQL 
 
 **You will learn to** read a plan from its children upward, distinguish estimates from observations,
 and explain why a selective query can still inspect every row. You need basic filtering and sorting.
-Start from a fresh database and run the editors in order.
+The page prepares a fresh database automatically. Run the editors in order.
 
 ## The incident
 
@@ -151,10 +151,12 @@ PostgreSQL's operators and implementation details can differ. This reading is op
 
 ## Transfer the idea
 
-Change the query to `ORDER BY id DESC`. The primary-key index can supply that order. Predict whether
-a plan using that index can stop before reaching the beginning of the table. Run it and inspect any
-rows removed by the tenant filter. A useful answer distinguishes **supplying order** from **locating
-the tenant**; the index can do the first even when it cannot do the second.
+Return to the SQL editor under [Measure the work](#measure-the-work). Record the scan type and
+**Rows Removed by Filter** from the first run. Keep `WHERE tenant_id = 42` and `LIMIT 20`. Replace
+`ORDER BY created_at DESC` with `ORDER BY id DESC`. Predict whether the primary-key index can
+supply this order and stop early. Select **Run SQL** and compare the same evidence. If the plan
+uses the primary-key index, which work does it handle and which work does the tenant filter
+still need to do?
 
 ## What this cannot tell you
 

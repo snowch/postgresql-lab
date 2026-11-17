@@ -39,7 +39,17 @@ function startLab() {
   const checkpointDownload=document.querySelector('#download-checkpoint');
   function setBusy(value) {
     busy=value;
-    cells.forEach(cell=>cell.querySelector('.run').disabled=busy||!ready);
+    for(const cell of cells) {
+      cell.querySelector('.run').disabled=busy||!ready;
+      const localStatus=cell.querySelector('.cell-status');
+      const message=!ready
+        ? operation==='init'?'Starting PostgreSQL…':'Use Reset database to run SQL.'
+        : busy
+          ? active===cell?'Executing SQL…':'The shared database is busy.'
+          : '';
+      localStatus.textContent=message;
+      localStatus.hidden=!message;
+    }
     if(save)save.disabled=busy||!ready;
     if(restore)restore.disabled=busy||!savedCheckpoint;
     if(checkpointDownload)checkpointDownload.disabled=busy||!savedCheckpoint;
@@ -50,27 +60,48 @@ function startLab() {
       cell.querySelector('.result').replaceChildren();
       delete cell.dataset.executed;delete cell.dataset.execution;
       cell.querySelector('.execution-note').hidden=true;
+      cell.querySelector('.query-error').hidden=true;
     });
   }
   function updateNotes() {
     for(const cell of cells) {
       const note=cell.querySelector('.execution-note');
       note.hidden=!cell.dataset.execution;
-      if(!note.hidden)note.textContent=cell.querySelector('textarea').value!==cell.dataset.executed
-        ? 'SQL edited · output below is from the previous SQL.'
-        : `Execution ${cell.dataset.execution}${Number(cell.dataset.execution)<execution?' · later statements may have changed the database.':''}`;
+      if(!note.hidden) {
+        const message=cell.querySelector('textarea').value!==cell.dataset.executed
+          ? 'SQL edited. This result is from the last successful SQL in this editor.'
+          : `Successful execution ${cell.dataset.execution}.`;
+        const later=Number(cell.dataset.execution)<execution?' The database may have changed since this result.':'';
+        note.textContent=message+later;
+      }
     }
+  }
+  function reportFailure(message) {
+    if(!active)return;
+    const error=active.querySelector('.query-error');
+    error.hidden=false;
+    error.textContent=message;
+    execution++;
+    updateNotes();
+  }
+  function finish() {
+    const cell=active;
+    const returnFocus=ready && cell?.querySelector('.cell-status')===document.activeElement;
+    active=null;operation=null;setBusy(false);
+    if(returnFocus)cell.querySelector('.run').focus({preventScroll:true});
   }
   function render(container,results) {
     container.replaceChildren();
     for(const result of results) {
+      const isPlan=result.fields[0]?.name==='QUERY PLAN';
       const note=document.createElement('p');note.className='result-note';
-      note.textContent=result.fields.length
+      if(isPlan)note.textContent=result.totalRows>100?'Query plan. First 100 lines shown.':'Query plan';
+      else note.textContent=result.fields.length
         ? `${result.totalRows} row(s)${result.totalRows>100?' · showing first 100':''}`
         : `Statement complete${result.affectedRows!==undefined?` · ${result.affectedRows} affected row(s)`:''}`;
       container.append(note);
       if(!result.rows.length)continue;
-      if(result.fields[0]?.name==='QUERY PLAN') {
+      if(isPlan) {
         const pre=document.createElement('pre');pre.textContent=result.rows.map(row=>row['QUERY PLAN']).join('\n');container.append(pre);
       }else{
         const table=document.createElement('table'),head=table.createTHead().insertRow();
@@ -90,19 +121,30 @@ function startLab() {
   function timeout(milliseconds) {
     clearTimeout(timer);
     timer=setTimeout(()=>{
-      worker.terminate();ready=false;
+      worker.terminate();worker=null;ready=false;
       const message=`Stopped after ${milliseconds/1000} seconds. Reset database to continue.`;
-      if(active)active.querySelector('.result').textContent=message;
+      reportFailure(message);
       if(operation==='snapshot')checkpointStatus.textContent=message;
-      status.textContent='Database stopped · reset to start again';active=null;operation=null;setBusy(false);
+      status.textContent='Database stopped. Reset database to start again.';
+      finish();
     },milliseconds);
   }
   function initialize(snapshot=null) {
-    worker?.terminate();clearTimeout(timer);active=null;operation='init';ready=false;setBusy(true);clearResults();
+    worker?.terminate();worker=null;clearTimeout(timer);active=null;operation='init';ready=false;setBusy(true);clearResults();
     status.textContent=snapshot?'Restoring checkpoint into a fresh PostgreSQL instance…':'Starting PostgreSQL and loading 60,000 orders…';
     if(snapshot)checkpointStatus.textContent='Restoring checkpoint into a fresh PostgreSQL instance…';
-    worker=new Worker(new URL('./db-worker.js',import.meta.url),{type:'module'});
-    worker.onmessage=({data})=>{
+    let currentWorker;
+    try {
+      currentWorker=new Worker(new URL('./db-worker.js',import.meta.url),{type:'module'});
+    } catch(error) {
+      status.textContent=`Database failed to start. ${error.message}`;
+      if(snapshot)checkpointStatus.textContent=status.textContent;
+      finish();
+      return;
+    }
+    worker=currentWorker;
+    currentWorker.onmessage=({data})=>{
+      if(worker!==currentWorker)return;
       clearTimeout(timer);
       if(data.type==='ready') {
         ready=true;status.textContent=data.restored?'Ready · checkpoint restored · verify the data':'Ready · 60,000 orders · in-memory database';
@@ -114,8 +156,7 @@ function startLab() {
         status.textContent='Ready · recovery checkpoint saved';
       }else if(data.type==='error') {
         if(active) {
-          delete active.dataset.execution;active.querySelector('.execution-note').hidden=true;
-          active.querySelector('.result').textContent=`SQL error: ${data.message}. Any open transaction was rolled back.`;
+          reportFailure(`SQL error. ${data.message}. Open transactions are rolled back.`);
         }else if(checkpointStatus)checkpointStatus.textContent=`Checkpoint operation failed: ${data.message}`;
         status.textContent=ready?'Operation failed · edit and retry, or reset':`Database failed to start: ${data.message}`;
       }else if(active) {
@@ -123,18 +164,40 @@ function startLab() {
         active.dataset.executed=active.dataset.submitted;active.dataset.execution=String(++execution);updateNotes();
         status.textContent='Ready · changes shared by experiments on this page';
       }
-      active=null;operation=null;setBusy(false);
+      finish();
     };
-    worker.onerror=event=>{
-      clearTimeout(timer);ready=false;active=null;operation=null;setBusy(false);
+    currentWorker.onerror=event=>{
+      if(worker!==currentWorker)return;
+      clearTimeout(timer);ready=false;
       status.textContent=`Database worker failed: ${event.message||'reload or reset to retry'}`;
+      reportFailure(status.textContent);
+      finish();
     };
     worker.postMessage({type:'init',snapshot});timeout(90000);
   }
   for(const cell of cells) {
     const editor=cell.querySelector('textarea'),original=editor.value;
-    cell.querySelector('.restore').addEventListener('click',()=>{editor.value=original;updateNotes();});
-    editor.addEventListener('input',updateNotes);
+    const recover=cell.querySelector('.recover');
+    const runButton=cell.querySelector('.run');
+    const localStatus=cell.querySelector('.cell-status');
+    let previousEdit=null;
+    function updateRecovery() {
+      recover.hidden=previousEdit===null||editor.value===previousEdit;
+    }
+    function replaceSql(sql) {
+      const outgoing=editor.value;
+      if(outgoing!==original&&outgoing!==sql)previousEdit=outgoing;
+      editor.value=sql;
+      updateRecovery();
+      updateNotes();
+      editor.focus();
+      editor.setSelectionRange(0,0);
+      editor.scrollTop=0;
+      editor.scrollLeft=0;
+    }
+    cell.querySelector('.restore').addEventListener('click',()=>replaceSql(original));
+    recover.addEventListener('click',()=>{if(previousEdit!==null)replaceSql(previousEdit);});
+    editor.addEventListener('input',()=>{updateNotes();updateRecovery();});
     cell.querySelector('.copy').addEventListener('click',async event=>{
       try{await navigator.clipboard.writeText(editor.value);event.target.textContent='Copied';}
       catch{editor.focus();editor.select();event.target.textContent='Select and copy';}
@@ -142,11 +205,14 @@ function startLab() {
     });
     const run=()=>{
       if(!ready||busy)return;
+      const moveFocus=document.activeElement===runButton;
       active=cell;operation='query';setBusy(true);
-      cell.querySelector('.result').textContent='Running…';status.textContent='Executing SQL…';
+      cell.querySelector('.query-error').hidden=true;
+      status.textContent='Executing SQL…';
+      if(moveFocus)localStatus.focus({preventScroll:true});
       cell.dataset.submitted=editor.value;worker.postMessage({type:'exec',sql:editor.value});timeout(30000);
     };
-    cell.querySelector('.run').addEventListener('click',run);
+    runButton.addEventListener('click',run);
     editor.addEventListener('keydown',event=>{
       if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();run();}
     });

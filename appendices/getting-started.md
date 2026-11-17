@@ -3,8 +3,9 @@
 Run a query, inspect the result, and learn how to recover before you investigate a plan.
 
 Each investigation opens a fresh, in-memory PostgreSQL database with the same synthetic order table.
-The database loads automatically on pages with SQL experiments. Wait for the **Ready** message at the
-bottom of the page, then select **Run SQL** or press Ctrl+Enter (⌘+Enter on macOS) in an editor.
+The database loads automatically on pages with SQL experiments. The shared database status appears
+above the first editor. When **Run SQL** becomes available, select it or press Ctrl+Enter
+(⌘+Enter on macOS) in an editor.
 
 ## Check your connection
 
@@ -44,8 +45,9 @@ one aggregate row containing zero because it has no grouping key.
 ## Know what persists
 
 All SQL editors **on the same page share one database**. Run the experiments in order. A new index
-created in one editor affects the next editor. **Restore SQL** restores only that editor's original
-text; it does not undo database changes.
+created in one editor affects the next editor. **Restore SQL** replaces that editor's text with the
+published SQL. **Recover edit** brings back the last replaced text on this page. These controls
+edit SQL text. Use **Reset database** to recreate the original database.
 
 **Reset database** immediately stops any running query, discards database changes, clears outputs,
 and reloads the original fixture. Your edited SQL remains in its editor. To replay a lesson exactly,
@@ -54,8 +56,9 @@ Copy anything you want to keep before leaving the page.
 
 ## Read results safely
 
-SQL errors appear beneath the editor. Any open transaction is rolled back after an error, so later
-experiments can run. Correct the statement and retry, or reset if your schema has changed.
+SQL errors appear next to the editor's last successful result, when one is available. An error
+rolls back any open transaction. Check the error and try again, or reset if you need the original
+schema. The execution note identifies results from earlier SQL or a database that may have changed.
 
 The output shows up to 100 rows per result. Use aggregates or `LIMIT` when exploring. This display
 limit does not limit the work PostgreSQL performs. Queries running longer than 30 seconds stop the
@@ -66,7 +69,7 @@ service. The database is temporary, so use this lab for experiments, not durable
 
 ## Take the SQL with you
 
-Use **Copy SQL** on an editor or **Download SQL** at the bottom to save all the page's current SQL,
+Use **Copy SQL** on an editor or **Download SQL** above the first editor to save all the page's current SQL,
 including your edits. Load the [fixture](./dataset.html) into an isolated server database before
 running downloaded examples with `psql`. Browser cells accept SQL; they do not implement psql's
 backslash commands or a Unix shell.
