@@ -3,12 +3,12 @@
 A transaction can retain a lock after its last statement finishes. Observe your own locks in the browser before optionally tracing another session's wait on a server.
 
 **You will learn to** distinguish lock ownership from a blocking wait and connect lock release to
-transaction completion. Prerequisite: transaction boundaries. The browser uses one connection; it
-will not manufacture a second session or a deadlock.
+transaction completion. Prerequisite: transaction boundaries. The browser has one connection.
+The optional server experiment uses separate sessions to observe blocking.
 
 ## Browser: acquire a table lock
 
-A relation lock protects a table against incompatible operations. Predict whether a lock acquired
+A relation lock protects a table against operations that request a conflicting lock. Predict whether a lock acquired
 inside this transaction remains visible after the LOCK statement finishes.
 
 ```sql
@@ -16,7 +16,8 @@ CREATE TABLE lock_inventory (sku text PRIMARY KEY, stock integer NOT NULL);
 INSERT INTO lock_inventory VALUES ('book', 10);
 ```
 
-The fixture is now committed. Run the transaction separately so rollback cannot undo its setup.
+Once SQL 01 finishes, the table and its row are committed. Run SQL 02 separately so
+rolling back the lock experiment leaves the table in place.
 
 ```sql
 BEGIN;
@@ -60,11 +61,14 @@ COMMIT;
 SELECT * FROM lock_inventory;
 ```
 
-An UPDATE normally takes a `RowExclusiveLock` on the relation in addition to its row-version and
-transaction locking behavior. `pg_locks` is not a simple list of every row lock held. A relation
+Find `RowExclusiveLock` in `mode` and check that the last result reports `stock = 9`.
+PostgreSQL took this lock at table level while updating the row. `pg_locks` is not a simple list of every row lock held. A relation
 lock's name does not mean the whole table is unavailable to every other writer.
 
 ## Explain the browser evidence
+
+Which result identifies the held lock and which verifies its release? Where would you look
+for evidence that another session actually waited?
 
 <details><summary>Hint: ownership is not contention</summary>
 
@@ -84,18 +88,20 @@ or show a second backend's row-lock wait. The optional extension adds that missi
 
 ## Transfer the idea
 
-Change the explicit lock mode to `ACCESS SHARE` and compare the observed mode. Consult the lock
-conflict table and predict which schema change would conflict with it. Verify that prediction
-using the optional server setup, rather than making this connection wait on an invented competitor.
+After the original experiments, change `ACCESS EXCLUSIVE` to `ACCESS SHARE` in
+[SQL 02](#sql-2) and select **Run SQL**. The table already exists. Look for
+`mode = AccessShareLock` and `granted = true` in the new result and compare the mode with
+the original result. Run [SQL 03](#sql-3) to end the transaction and check for zero rows.
+Use the [lock conflict table](https://www.postgresql.org/docs/current/explicit-locking.html)
+to predict whether another session's `DROP TABLE` would have to wait.
 
 ## Optional server extension
 
-The browser investigation above is complete on its own. Use the [server setup](./server-setup.html)
-for the additional behavior below. Its copied commands run in a separate database and do not
-change your browser database.
+To run this extension, follow [server setup](./server-setup.html). Copy each panel to the
+labelled terminal or psql session. These commands use the Docker database.
 
 <details class="server-extension" id="server-extension">
-<summary>Open the independent-session server exercise</summary>
+<summary>Trace a wait to its blocking transaction</summary>
 
 Checkout is waiting even though its UPDATE is small. Find the transaction holding the needed lock before changing the query.
 
@@ -124,21 +130,22 @@ SET LOCAL lock_timeout = '15s';
 UPDATE lab.inventory SET stock = stock - 1 WHERE sku = 'book';
 ```
 
-Leave B waiting and move to observer. The timeout is a recovery bound: if you take longer than
-fifteen seconds, B may report a lock timeout instead. In that case roll back B, commit A, and replay
-the experiment from a fresh state to observe the blocking query.
+When the Session B panel waits, run the next panel in the Observer session. You have fifteen
+seconds before B reports a timeout. If it times out, run `ROLLBACK;` in B and `COMMIT;` in A,
+[reset the fixture](./server-setup.html#reconnect-and-reset-between-lessons), and repeat.
 
 ## Find the blocker
 
 ```sql-observer
-SELECT application_name, state, wait_event_type, wait_event,
+SELECT pid, application_name, state, wait_event_type, wait_event,
        pg_blocking_pids(pid) AS blockers, query
 FROM pg_stat_activity
 WHERE application_name IN ('lab-a', 'lab-b')
 ORDER BY application_name;
 ```
 
-Look for B waiting on a lock and A **idle in transaction**. A's last SQL statement finished, but its
+Find `lab-b` with `wait_event_type = Lock` and look for A's `pid` in B's `blockers`.
+Find `lab-a` with `state = idle in transaction`. A's last SQL statement finished, but its
 transaction still owns locks. A small UPDATE can therefore delay another small UPDATE indefinitely
 without a suitable timeout or transaction completion.
 
@@ -152,7 +159,8 @@ that view. A wait event is an observation at the time of sampling, not a complet
 COMMIT;
 ```
 
-Wait for B's UPDATE to finish, then commit it.
+Run the Session A panel to release the lock. When B's UPDATE returns, run the Session B panel
+to commit its change, then use the Observer panel to check `stock`.
 
 ```sql-b
 COMMIT;
@@ -197,7 +205,7 @@ establish the root cause of the blocker.
 
 ## Explain the intervention
 
-<details><summary>Hint</summary>
+<details><summary>A hint for explaining the server results</summary>
 
 Separate finishing a statement, finishing a transaction, canceling a statement, and terminating a
 connection. Their effects and risks differ.
@@ -221,7 +229,6 @@ can progress and why PostgreSQL aborts one transaction. Propose one consistent l
 both paths, plus transaction-level retries. The exercise's core invariant is ordering, not which
 session the deadlock detector chooses as its victim.
 
-**Takeaway:** Diagnose the owning transaction, not only the waiting statement.
 Next: [change a busy database](./migrations.html).
 
 Primary sources: [Explicit locking](https://www.postgresql.org/docs/current/explicit-locking.html) and

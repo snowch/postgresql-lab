@@ -1,6 +1,6 @@
 # Plan vocabulary
 
-Use this page as a reference after reading a plan in context.
+Use these definitions alongside the output in [Read a query plan](./reading-plans.html).
 
 | Term | Meaning |
 | --- | --- |
@@ -16,8 +16,8 @@ Use this page as a reference after reading a plan in context.
 | Heap | PostgreSQL table storage containing row versions. |
 | Visibility map | Per-page information including whether all tuples are visible to all relevant transactions. |
 | Buffer hit | A requested block was already in PostgreSQL's shared buffer cache. |
-| Buffer read | A block was loaded into that cache; this is not necessarily physical device I/O. |
-| Loop | One execution of a plan node; actual rows is reported per loop. |
+| Buffer read | PostgreSQL loaded a block into its shared buffer cache. The operating system can supply it from memory. |
+| Loop | One execution of a plan node. PostgreSQL reports actual rows per loop. |
 | Covering index | Index containing all column values a particular query needs. |
 | Extended statistics | Statistics describing relationships between columns or expressions. |
 | Dependencies | Statistics about how strongly columns determine one another. |

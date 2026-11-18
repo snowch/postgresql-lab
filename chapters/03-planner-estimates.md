@@ -4,8 +4,8 @@ The reporting query finds far more rows than the planner expects. Check what Pos
 
 **You will learn to** compare estimated and actual cardinality, separate stale statistics from missing
 relationship information, and test multicolumn statistics without forcing a plan. Cardinality means
-the number of rows at a point in a query. Read the first two investigations before starting.
-This page has a fresh database, with only the primary-key index.
+the number of rows at a point in a query. Read [query plans](./reading-plans.html) and
+[query-oriented indexes](./designing-indexes.html) first.
 
 ## The incident
 
@@ -194,10 +194,9 @@ PostgreSQL's operators and implementation details can differ. This reading is op
 
 ## Transfer the idea
 
-Imagine a table with postal code and city, or product category and supplier. Propose a query whose
-filters might be correlated. State which evidence you would collect before adding statistics, which
-statistics kind you would try, and how you would test the result. A strong answer checks data shape,
-existing statistics, compatible and contradictory predicates, and the actual workload's plan.
+Design a test for a table with postal code and city. Write one pair of filters that can match
+and one pair that cannot. Use the estimated and actual scan rows from this chapter to explain
+how you would distinguish stale statistics from missing information about the relationship.
 
 ## What this cannot tell you
 

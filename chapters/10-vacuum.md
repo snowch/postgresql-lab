@@ -3,11 +3,11 @@
 A table keeps growing after a batch deletes most rows. Distinguish visible rows, reusable space, and the physical file before choosing maintenance.
 
 **You will learn to** explain ordinary vacuum, visibility-map benefits, and why a rewrite is a
-separate operation. Prerequisite: MVCC and index-only scans. Run VACUUM cells on their own.
+separate operation. Prerequisite: MVCC and index-only scans. Run each `VACUUM` in its own editor.
 
 ## Remove logical rows
 
-Create a disposable copy so this investigation cannot change the shared fixture. Predict whether
+SQL 01 creates and edits a copy of the order table. Predict whether
 removing most rows immediately returns most file space.
 
 ```sql
@@ -21,7 +21,7 @@ SELECT count(*) AS live_rows,
 ```
 
 DELETE makes rows invisible to later transactions while preserving versions potentially needed by
-older snapshots. The count and relation size answer different questions. The size includes storage
+older snapshots. Compare both `live_rows` and `heap_bytes` before and after the delete. Size includes storage
 that may contain dead tuples or free space.
 
 ## Reclaim reusable space
@@ -75,13 +75,16 @@ SELECT count(*) AS live_rows,
        pg_relation_size('vacuum_demo') AS heap_bytes FROM vacuum_demo;
 ```
 
-Compare the visible count and file size with the previous observations. The row count is preserved;
+Compare `live_rows` and `heap_bytes` with the measurement after ordinary vacuum. The row count is preserved;
 the fixture's file is generally smaller after compaction. That does not measure lock duration or
 available disk headroom on a production server.
 
 ## Explain the maintenance choice
 
-<details><summary>Hint</summary>
+Which command removed visible rows? Which made empty space available for future writes, and
+which rewrote the table? Cite the row count and size from each measurement.
+
+<details><summary>A hint for explaining the results</summary>
 
 Ask whether the need is reusable space for future writes, improved visibility metadata, or returning
 allocated storage to the filesystem. Those needs do not all require the same operation.
@@ -100,11 +103,12 @@ its scheduling and blockers require a real server to investigate.
 
 ## Transfer the idea
 
-Reset and delete the newest rows instead of the oldest. Compare the file size after ordinary vacuum.
-Explain why end-of-file truncation makes that layout different. A good answer avoids claiming
-ordinary vacuum always shrinks a table or never shrinks one.
+Record `live_rows` and `heap_bytes` from [SQL 03](#sql-3), the measurement after ordinary
+vacuum. Select **Reset database**, then change `id <= 50000` to `id > 10000` in
+[SQL 01](#sql-1). Select **Run SQL** in SQL 01, SQL 02, and SQL 03 in order. Stop before
+the later rewrite. Both runs retain 10,000 rows. Why can deleting the newest rows leave an
+empty suffix that ordinary vacuum may truncate? Compare `heap_bytes` for evidence.
 
-**Takeaway:** Space reuse, visibility maintenance, and compaction are separate outcomes.
 Next: [keep plans healthy](./maintenance.html).
 
 Primary source: [Routine vacuuming](https://www.postgresql.org/docs/current/routine-vacuuming.html).

@@ -3,8 +3,7 @@
 A support query becomes faster after an index rollout, but order imports now maintain several overlapping structures. Decide which indexes deserve their space.
 
 **You will learn to** connect predicates to partial and expression indexes, compare index sizes, and
-explain why read benefits carry write costs. Prerequisite: composite and covering indexes. Run the
-editors in order from this page's fresh database.
+explain why read benefits carry write costs. Prerequisite: composite and covering indexes.
 
 ## Establish the workload
 
@@ -48,7 +47,8 @@ SELECT indexrelid::regclass AS index_name,
 FROM pg_index WHERE indrelid = 'orders'::regclass;
 ```
 
-Compare the two index sizes. The full index supports a wider set of status predicates and includes
+Compare `size` for `orders_pending` and `orders_status_time`. The full index supports a wider
+set of status predicates and includes
 more entries. This does not establish that its write latency is a fixed multiple of the partial index.
 A prepared statement with a generic status parameter can also prevent the proof needed for the partial
 index; inspect the plan your application's preparation strategy produces.
@@ -82,7 +82,8 @@ SELECT id, created_at FROM orders
 WHERE status = 'pending' ORDER BY created_at DESC LIMIT 20;
 ```
 
-The update changes membership in the partial index and changes a key in the full status index. Old
+Compare `pending_before` and `pending_after` to see how many orders left the indexed subset.
+The update also changes a key in the full status index. Old
 versions can remain until maintenance can reclaim them. Index file size need not shrink immediately
 when the live subset shrinks. Expression indexes also add maintenance when their input values change.
 
@@ -92,7 +93,7 @@ Which index would you retain for a service that only reads the pending queue? Wh
 would justify keeping the full status index too? Identify a column update that does not change either
 index's logical keys, and explain why MVCC may still require physical maintenance.
 
-<details><summary>Hint</summary>
+<details><summary>A hint for explaining the results</summary>
 
 Separate supported reads, live entries, and the work of creating and cleaning up row versions.
 Two indexes serving one query are not automatically twice as useful.
@@ -111,11 +112,25 @@ No timing in this single-user fixture establishes import throughput under produc
 
 ## Transfer the idea
 
-Design an index for `WHERE tenant_id = 42 AND status = 'pending' ORDER BY created_at DESC LIMIT 20`.
-Try a partial index whose keys start with tenant ID. Explain which tenant-specific and global queue
-queries it can efficiently serve. Compare storage before recommending the additional index.
+With the original experiments complete, replace [SQL 05](#sql-5) with the following and
+select **Run SQL**. This uses the same database without recreating the earlier indexes.
 
-**Takeaway:** An index has a supported workload and a maintenance bill. Name both.
+```text
+CREATE INDEX orders_pending_tenant_time ON orders (tenant_id, created_at DESC)
+WHERE status = 'pending';
+EXPLAIN (ANALYZE, TIMING OFF)
+SELECT id, created_at FROM orders
+WHERE tenant_id = 42 AND status = 'pending' ORDER BY created_at DESC LIMIT 20;
+EXPLAIN (ANALYZE, TIMING OFF)
+SELECT id, created_at FROM orders
+WHERE status = 'pending' ORDER BY created_at DESC LIMIT 20;
+SELECT relname, pg_relation_size(oid) AS bytes FROM pg_class
+WHERE relname IN ('orders_pending', 'orders_pending_tenant_time') ORDER BY relname;
+```
+
+Compare the scan and any sort in both plans. Which query can use the tenant-first index to
+return rows in order? Use `bytes` to see the space cost of keeping both partial indexes.
+
 Next: [make invalid data impossible](./constraints.html).
 
 Primary sources: [Partial indexes](https://www.postgresql.org/docs/current/indexes-partial.html) and

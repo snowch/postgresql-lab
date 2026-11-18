@@ -3,8 +3,7 @@
 A failed request must leave balances unchanged. Test atomicity and savepoints in this browser, then optionally investigate independent snapshots on a server.
 
 **You will learn to** distinguish commit, rollback, and partial rollback, and explain what a single
-connection can and cannot prove about isolation. Prerequisites: MVCC and basic transactions. No setup
-is needed for the browser investigation; every editor shares this page's connection.
+connection reveals about transactions. Prerequisites: MVCC and basic transactions.
 
 ## Browser: make the change atomic
 
@@ -16,7 +15,8 @@ CREATE TABLE transfer_accounts (id integer PRIMARY KEY, balance integer NOT NULL
 INSERT INTO transfer_accounts VALUES (1, 100), (2, 100);
 ```
 
-The fixture is now committed. Run the transaction separately so rollback cannot undo its setup.
+Once SQL 01 finishes, the two initial balances are committed. Select **Run SQL** in SQL 02
+to test a rollback that affects only the transfer.
 
 ```sql
 BEGIN;
@@ -27,8 +27,8 @@ ROLLBACK;
 SELECT * FROM transfer_accounts ORDER BY id;
 ```
 
-The first result reads this transaction's own changes. The second returns the original balances.
-Neither result demonstrates another session's visibility: both queries use this connection.
+Compare `balance` for each `id` in the two tables. The first SELECT reads the transfer's uncommitted
+changes on this connection. After ROLLBACK, the second SELECT shows the original balances.
 
 ## Browser: recover to a savepoint
 
@@ -48,7 +48,7 @@ SELECT sum(balance) AS total_balance FROM transfer_accounts;
 ```
 
 The incorrect credit is undone, while the debit before the savepoint remains and the corrected
-credit commits. Verify both individual balances and the preserved total. Total alone would not
+credit commits. Verify `balance` for IDs 1 and 2 and the preserved `total_balance`. Total alone would not
 prove the money reached the intended account.
 
 ## Browser: identify the isolation boundary
@@ -65,6 +65,9 @@ transactions. Two PGlite instances have separate databases, so they do not repro
 contending for the same rows. The extension below uses a real shared server for that experiment.
 
 ## Explain the browser evidence
+
+Which results prove that a full rollback undoes both changes? Which show that a savepoint keeps
+the earlier debit?
 
 <details><summary>Hint: trace the rollback boundary</summary>
 
@@ -84,18 +87,21 @@ protection against concurrent write skew. That requires the independent-session 
 
 ## Transfer the idea
 
-Try a transfer where the debit is larger than the available balance. The CHECK should reject it;
-the lab rolls back any open transaction after a SQL error. Verify both balances before retrying.
-Explain why application retry logic must reevaluate the whole transaction's decision.
+After the original experiments, replace `balance - 30` with `balance - 101` in
+[SQL 02](#sql-2) and select **Run SQL**. Account 1 now has 80, so its debit should trigger the
+nonnegative balance check. Read the SQL error. If an earlier successful result is still shown,
+it describes that earlier execution.
+
+Replace the same editor with `SELECT id, balance FROM transfer_accounts ORDER BY id;` and
+run it again. Check for balances 80 and 120. Why must a retry read the current balances again?
 
 ## Optional server extension
 
-The browser investigation above is complete on its own. Use the [server setup](./server-setup.html)
-for the additional behavior below. Its copied commands run in a separate database and do not
-change your browser database.
+To run this extension, follow [server setup](./server-setup.html). Copy each panel to the
+labelled terminal or psql session. These commands use the Docker database.
 
 <details class="server-extension" id="server-extension">
-<summary>Open the independent-session server exercise</summary>
+<summary>Test write skew with independent transactions</summary>
 
 Two doctors each see someone else on call and both leave. Reproduce the anomaly with independent snapshots, then prevent the invalid committed state.
 
@@ -115,8 +121,9 @@ INSERT INTO lab.on_call VALUES ('alice', true), ('bob', true);
 
 ## Interleave two snapshots
 
-Repeatable Read uses a stable transaction snapshot after the transaction takes its first snapshot.
-Run A's read, then B's read, before either writes.
+A snapshot determines which committed row versions a transaction can see. In Repeatable Read,
+that view stays stable from the first query. Run the Session A and Session B read panels in
+order before either session writes.
 
 ```sql-a
 BEGIN ISOLATION LEVEL REPEATABLE READ;
@@ -146,7 +153,8 @@ SELECT count(*) AS remaining FROM lab.on_call WHERE available;
 UPDATE lab.on_call SET available = true;
 ```
 
-Both commits can succeed because the transactions changed different rows. The combined result breaks
+In the Observer result, check how many rows have `available = true`. Both commits can succeed
+because the transactions changed different rows. The combined result breaks
 a rule each transaction checked. This is **write skew**. A stable snapshot alone does not serialize
 decisions about a set of rows. A row-local CHECK cannot express this cross-row invariant either.
 
@@ -170,8 +178,8 @@ UPDATE lab.on_call SET available = false WHERE name = 'alice';
 COMMIT;
 ```
 
-The next panel deliberately raises SQLSTATE `40001`, a serialization failure, on this controlled
-schedule. In a less controlled schedule, failure can occur at another statement or at commit.
+The next Session B panel should report that PostgreSQL could not serialize the transaction.
+This error has SQLSTATE `40001`. In another schedule it could appear at a different statement or at commit.
 
 ```sql-b
 -- expect-error: 40001
@@ -199,7 +207,7 @@ that does not duplicate them when the transaction is retried.
 
 ## Explain the protection
 
-<details><summary>Hint</summary>
+<details><summary>A hint for explaining the server results</summary>
 
 Different written rows do not imply independent decisions. Identify what each transaction read that
 the other transaction changed.
@@ -223,7 +231,6 @@ single invariant-owner row before checking availability. Explain the lock orderi
 and which writers must follow the protocol. Do not describe an isolated row lock as protection for
 arbitrary unseen rows.
 
-**Takeaway:** Isolation protects transaction decisions, and retry logic is part of the design.
 Next: [investigate a blocked checkout](./locks.html).
 
 Primary source: [Transaction isolation](https://www.postgresql.org/docs/current/transaction-iso.html).

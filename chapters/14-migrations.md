@@ -3,8 +3,8 @@
 Roll out a new rule in stages: protect new writes, repair old data, and validate. Run that process in the browser, with concurrent DDL behavior available as an optional server extension.
 
 **You will learn to** distinguish enforcement from validation, perform a bounded backfill, and
-verify an index's catalog state. Prerequisites: constraints and indexes. This browser investigation
-uses a small dedicated table and needs no server setup.
+verify an index's catalog state. A backfill updates rows already stored under the old schema.
+Prerequisites: constraints and indexes.
 
 ## Browser: introduce a compatible schema
 
@@ -21,8 +21,9 @@ WHERE conrelid = 'migration_orders'::regclass ORDER BY conname;
 SELECT * FROM migration_orders ORDER BY id;
 ```
 
-The constraint is present but not yet validated against every existing row. It still enforces
-new inserts and updates. `convalidated = false` describes the missing old-data proof, not a disabled rule.
+Find `migration_positive` in `conname` and the negative amount in the data table.
+`convalidated = false` means PostgreSQL has yet to verify existing rows. New inserts and updates
+must satisfy the check.
 
 ## Browser: test enforcement and repair old rows
 
@@ -42,7 +43,8 @@ UPDATE migration_orders SET amount = 0, reviewed = true WHERE id = 2;
 SELECT count(*) AS violations FROM migration_orders WHERE amount < 0;
 ```
 
-This tiny backfill names one key explicitly. A production backfill needs a bounded batch strategy,
+Look for the check failure in `new_write_result` and zero in `violations`. The supplied backfill
+repairs one existing row. A production backfill needs a bounded batch strategy,
 progress tracking, and a business-approved repair value. Changing all negative amounts to zero is
 fixture behavior, not a general accounting policy.
 
@@ -59,11 +61,14 @@ SELECT indexrelid::regclass AS name, indisready, indisvalid FROM pg_index
 WHERE indexrelid = 'migration_amount'::regclass;
 ```
 
-Validation establishes the existing-data proof. The ordinary index build is real, but no competing
-writer is running here. It therefore cannot establish production blocking duration or the behavior
+Check `convalidated` for the constraint and `indisready` and `indisvalid` for the index. The
+ordinary index build ran on one connection. It therefore cannot establish production blocking duration or the behavior
 of CREATE INDEX CONCURRENTLY. The server extension tests those distinct concerns.
 
 ## Explain the browser evidence
+
+Which result shows enforcement before validation? Which confirms that the historical data and
+index passed their separate checks?
 
 <details><summary>Hint: define a completion check per stage</summary>
 
@@ -89,18 +94,17 @@ extension to investigate the locks that the same migration takes under active re
 
 ## Optional server extension
 
-The browser investigation above is complete on its own. Use the [server setup](./server-setup.html)
-for the additional behavior below. Its copied commands run in a separate database and do not
-change your browser database.
+To run this extension, follow [server setup](./server-setup.html). Copy each panel to the
+labelled terminal or psql session. These commands use the Docker database.
 
 <details class="server-extension" id="server-extension">
-<summary>Open the independent-session server exercise</summary>
+<summary>Observe DDL blocking and build an index concurrently</summary>
 
 A schema deployment waits behind an ordinary transaction. Bound that wait and split validation from enforcement before retrying the migration.
 
 **You will learn to** observe DDL blocking, stage a constraint, and build an index without wrapping
 CONCURRENTLY in a transaction. Prerequisites: locks, constraints, and indexes. Use fresh
-[server sessions](./server-setup.html). This lab has no browser Run controls.
+[server sessions](./server-setup.html). Copy the panels in this extension into the named sessions.
 
 ## Reproduce the blocking change
 
@@ -134,7 +138,8 @@ ALTER TABLE lab.orders ADD COLUMN reviewed boolean;
 RESET lock_timeout;
 ```
 
-The timeout prevented an unbounded wait. A waiting DDL statement can also cause later requests to
+Read the timeout error from B's ALTER. In Observer, use `state` and `xact_start` to identify A's
+still-open transaction. A waiting DDL statement can also cause later requests to
 queue behind it; inspecting only the original reader can miss the growing impact. Lock behavior is
 operation-specific, so measure the actual command on a representative server version.
 
@@ -160,7 +165,7 @@ if validation fails.
 
 ## Build an index during writes
 
-The next statement must run as its own command, outside an explicit transaction. Many migration
+After the preceding transaction ends, run the `CREATE INDEX CONCURRENTLY` panel on its own. Many migration
 frameworks wrap files in transactions by default, so configure this step deliberately.
 
 ```sql-b
@@ -180,7 +185,7 @@ table at a time.
 
 ## Explain a rollout
 
-<details><summary>Hint</summary>
+<details><summary>A hint for explaining the server results</summary>
 
 For each step, state its lock, its scan/work, the evidence of completion, and a safe retry state.
 
@@ -203,7 +208,6 @@ backfill in bounded batches, verify existing rows, then enforce the final rule. 
 and resume condition for each stage. Explain why one large UPDATE inside a long migration transaction
 can recreate the blocking problem you tried to avoid.
 
-**Takeaway:** Treat schema changes as observable stages with bounded waits and explicit completion checks.
 Next: [find the expensive workload](./observability.html).
 
 Primary sources: [ALTER TABLE](https://www.postgresql.org/docs/current/sql-altertable.html) and

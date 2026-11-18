@@ -7,8 +7,8 @@ indexes, and account for validation and updates. Prerequisite: index conditions 
 
 ## Give documents a predictable shape
 
-JSONB stores a decomposed binary representation of JSON. It supports structured operators and indexes;
-it does not remove the need to decide which properties an application requires.
+JSONB stores JSON in a form PostgreSQL can search and index. The first editor builds one document
+per order. Inspect `metadata` for the `channel`, `priority`, and `tags` keys.
 
 ```sql
 CREATE TABLE order_metadata AS
@@ -22,7 +22,8 @@ SELECT id, metadata FROM order_metadata ORDER BY id LIMIT 3;
 ```
 
 Predict the type returned by `->` and `->>`. A JSON number and a JSON string are different values,
-even when extracting them as text can produce similar-looking output.
+even when extracting them as text produces similar-looking output. Compare `json_type`
+with `text_type` after running SQL 02.
 
 ```sql
 SELECT metadata -> 'priority' AS json_value,
@@ -71,8 +72,7 @@ the key-existence operations of the default class.
 
 ## Validate and update deliberately
 
-The existence operator `?` checks a top-level key. A type check can distinguish an integer-like JSON
-number from an arbitrary string, although a full business range constraint needs more detail.
+The existence operator `?` checks a top-level key. This example checks that `channel` exists and contains a JSON string.
 
 ```sql
 ALTER TABLE order_metadata ADD CONSTRAINT channel_shape
@@ -92,7 +92,10 @@ A missing document can evade a CHECK through NULL, so add NOT NULL if the docume
 
 ## Explain the design
 
-<details><summary>Hint</summary>
+Which plan uses the index on document contents? Which uses the index on extracted channel text?
+Use the displayed index names to support your answer.
+
+<details><summary>A hint for explaining the results</summary>
 
 Start with the stable invariants and frequent predicates. Flexible metadata and core business columns
 have different validation and indexing needs.
@@ -110,11 +113,21 @@ JSONB can remain useful for optional metadata with a deliberately limited query 
 
 ## Transfer the idea
 
-Write filters for a missing priority, JSON null priority, and numeric zero priority. Inspect their
-results using a small VALUES relation before proposing an index. Explain why SQL NULL and JSON null
-must not be treated as one category.
+After the original experiments, replace [SQL 05](#sql-5) with the following and select
+**Run SQL** to classify documents with a missing, null, or zero priority.
 
-**Takeaway:** Choose a data representation, predicate semantics, and index as one design decision.
+```text
+SELECT label, doc ? 'priority' AS has_key,
+       (doc -> 'priority') = 'null'::jsonb AS json_null,
+       (doc -> 'priority') = '0'::jsonb AS numeric_zero
+FROM (VALUES ('missing', '{}'::jsonb),
+             ('null', '{"priority": null}'::jsonb),
+             ('zero', '{"priority": 0}'::jsonb)) AS examples(label, doc);
+```
+
+Inspect `has_key`, `json_null`, and `numeric_zero`. Why is `json_null` SQL NULL for the
+missing key and true for an explicit JSON null?
+
 Next: [divide a growing table](./partitioning.html).
 
 Primary source: [JSON types and indexing](https://www.postgresql.org/docs/current/datatype-json.html).

@@ -4,7 +4,7 @@ A report becomes expensive after a data batch. Diagnose and repair its statistic
 
 **You will learn to** test competing estimate and access-path hypotheses, verify business results,
 and compare work before declaring recovery. Prerequisites: plans, statistics, and indexes.
-This browser capstone requires no external backend or invented production traffic.
+This case uses synthetic orders and a single browser connection. The optional server case adds a blocked session.
 
 ## Browser: reproduce the incident
 
@@ -23,9 +23,9 @@ SELECT id, created_at, total_cents FROM incident_orders
 WHERE tenant_id = 999 ORDER BY created_at DESC LIMIT 20;
 ```
 
-Record the scan estimate, actual matching rows, filtering, and sort. Write two hypotheses: the
-planner lacks the new tenant's frequency, and the available storage path requires inspecting and
-ordering too many candidates. These claims need separate tests.
+In the first plan, record the scan's estimated and actual rows and **Rows Removed by Filter**.
+Does the planner know the new tenant's frequency? Does the scan still filter many orders and
+pass its matches to a sort? The next two experiments test those questions separately.
 
 ## Browser: repair the missing information
 
@@ -44,8 +44,8 @@ but a better estimate does not create a new way to find the tenant's rows in tim
 
 ## Browser: repair the access path
 
-Capture the baseline result in a temporary table before adding the index, then check the candidate
-preserves that result. EXCEPT ALL compares row multiplicities as well as values.
+SQL 03 saves the baseline in a temporary table before adding the index. Two `EXCEPT ALL`
+comparisons find missing, extra, or repeated rows in the new result.
 
 ```sql
 CREATE TEMP TABLE incident_expected AS
@@ -67,11 +67,15 @@ SELECT count(*) AS changed_result_rows FROM differences;
 ALTER TABLE incident_orders RESET (autovacuum_enabled);
 ```
 
-Look for early stopping and the removed sort, then require zero changed result rows. Compare the
+Look for the index name, the number of rows the scan emits, and whether a sort remains.
+Check that `changed_result_rows` is zero. Compare the
 tenant's count and total with your first observation if you experiment further. A speedup that
 changes the endpoint's answer is not a valid recovery.
 
 ## Explain the browser evidence
+
+Which result showed a better estimate? Which showed less access work? What did you check
+to confirm that the endpoint still returned the expected orders?
 
 <details><summary>Hint: test the hypotheses independently</summary>
 
@@ -98,18 +102,27 @@ PostgreSQL's operators and implementation details can differ. This reading is op
 
 ## Transfer the idea
 
-Repeat the incident with a tenant that owns most rows and a query without LIMIT. Predict whether
-the same index remains useful. Write an incident record containing evidence, competing hypotheses,
-interventions, verification, and one observation that would invalidate your preferred explanation.
+After the original investigation, replace [SQL 02](#sql-2) with the following and select
+**Run SQL**. The composite index is already present. This query asks for all 15,000 orders
+from the new tenant instead of the newest 20.
+
+```text
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+SELECT id, created_at, total_cents FROM incident_orders
+WHERE tenant_id = 999 ORDER BY created_at DESC;
+```
+
+Compare the scan, any sort, and actual rows with the indexed plan for 20 orders. Does the
+index still supply the order? Can the plan stop after 20 matches now? In your incident
+record, distinguish estimates, access work, and correctness checks.
 
 ## Optional server extension
 
-The browser investigation above is complete on its own. Use the [server setup](./server-setup.html)
-for the additional behavior below. Its copied commands run in a separate database and do not
-change your browser database.
+To run this extension, follow [server setup](./server-setup.html). Copy each panel to the
+labelled terminal or psql session. These commands use the Docker database.
 
 <details class="server-extension" id="server-extension">
-<summary>Open the independent-session server exercise</summary>
+<summary>Separate a blocked write from an expensive report</summary>
 
 A release adds an order report and a long-lived transaction. Diagnose two independent sources of delay, apply bounded interventions, and verify the resulting state.
 
@@ -121,8 +134,8 @@ This controlled exercise models incident mechanics, not production traffic volum
 ## Record competing hypotheses
 
 The symptoms are a slow tenant report and delayed order updates. Write two hypotheses before running
-the experiment: one about access work and one about transaction blocking. State what evidence would
-disprove each.
+the experiment. Predict which scan and sort work an index could remove, and what evidence in
+`pg_stat_activity` would show that a transaction is blocking another.
 
 ```sql-observer
 SELECT count(*) AS rows, count(DISTINCT tenant_id) AS tenants FROM lab.orders;
@@ -148,7 +161,7 @@ UPDATE lab.orders SET total_cents = total_cents + 1 WHERE id = 42;
 ```
 
 Leave B running. If the timeout expires before you finish observing, roll B back, complete A, and
-replay. Use observer to distinguish the wait from expensive query execution.
+repeat from the reset fixture. In Observer, check `wait_event_type` and `blockers` for `lab-b`.
 
 ```sql-observer
 SELECT application_name, state, wait_event_type, wait_event,
@@ -183,7 +196,7 @@ FROM pg_stat_activity WHERE application_name IN ('lab-a', 'lab-b')
 ORDER BY application_name;
 ```
 
-Verify the wait is gone and both intended increments occurred. A connection merely returning to
+Check that B's `blockers` is empty and that the final `total_cents` includes both increments. A connection merely returning to
 idle is not a substitute for checking the affected business state.
 
 ## Improve the report path
@@ -214,7 +227,7 @@ what remains unproven: this lesson has no load generator, latency percentile, or
 model. Prevention might include transaction-boundary fixes, latency budgets, query review, and
 maintenance monitoring, each tied to the evidence it addresses.
 
-<details><summary>Hint</summary>
+<details><summary>A hint for explaining the server results</summary>
 
 If an intervention would address only one symptom, keep the other hypothesis alive. Write down
 what you measured after each change rather than declaring victory after a successful command.
@@ -233,12 +246,11 @@ transaction-lifetime prevention and workload validation for the index as distinc
 
 ## Transfer the idea
 
-Replace the tenant report predicate with two correlated filters and repeat the diagnosis on a fresh
-fixture. Explain when ANALYZE, extended statistics, or an index addresses the evidence, and when none
-of them would fix a held lock. Then design a regression exercise that checks the invariant and access
-work without asserting exact milliseconds.
+Design a follow-up report with two correlated filters, such as `country = 'GB'` and
+`currency = 'GBP'`. State which estimate and actual row count you would compare to choose
+between fresh statistics, extended statistics, and a new access path. Which observation would
+still require a separate lock investigation?
 
-**Takeaway:** An incident ends with verified behavior and a causal explanation, not only a changed setting.
 Return to the [curriculum](./index.html) or use the [dataset](./dataset.html) to design your own case.
 
 Primary sources: [Performance tips](https://www.postgresql.org/docs/current/performance-tips.html) and
