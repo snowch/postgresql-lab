@@ -2,10 +2,9 @@
 
 Every runnable page starts with the same synthetic order table. Nothing comes from a customer database.
 
-The source of truth is [`web/seed.sql`](https://github.com/snowch/postgresql-lab/blob/main/web/seed.sql).
-It creates the schema, inserts deterministic data, disables JIT and parallel query execution for the
-fixture, and analyzes the table. Those settings keep the plan examples focused; they are not production
-configuration recommendations.
+The [dataset SQL](https://github.com/snowch/postgresql-lab/blob/main/web/seed.sql) creates the table,
+generates the same rows every time, and gathers planner statistics. It also turns off parallel queries
+and just-in-time compilation for these examples, so their plans focus on access and filtering.
 
 | Column | Meaning and fixture rule |
 | --- | --- |
@@ -18,9 +17,9 @@ configuration recommendations.
 | `total_cents` | Deterministic integer derived from the ID. Currency is stored separately. |
 | `payload` | Repeated synthetic text that makes a table row wider than the selected output. |
 
-The fixture has 600 orders per tenant and 6,000 British orders. The country/currency dependency is
-intentional. Other correlations exist because the generator is deterministic; do not interpret it
-as a realistic random population. The fixture isolates specific access-path and estimation questions.
+The fixture has 600 orders per tenant and 6,000 British orders. The estimation chapter uses the
+country and currency relationship. The formulas can introduce other correlations, so use the dataset
+to test the questions in each chapter.
 
 ## Reproducible behavior, variable measurements
 

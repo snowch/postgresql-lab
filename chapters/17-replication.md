@@ -3,13 +3,14 @@
 Identify the database's recovery role and inspect real WAL positions in the browser. Then optionally start a primary and standby to investigate actual replay lag.
 
 **You will learn to** distinguish an engine's role, a WAL byte position, and a replica's visible state.
-Prerequisites: transactions and recovery. This browser has one database instance; it does not
-simulate a second database or claim to stream WAL between workers.
+Prerequisites: transactions and recovery. The browser has one database instance. The server
+exercise starts a second instance to follow the first.
 
 ## Browser: identify the role
 
-Predict whether this database is currently replaying another primary's log, and whether receive
-and replay positions have meaningful values here.
+The **write-ahead log** (WAL) records changes PostgreSQL can replay for recovery. A **standby**
+receives and replays WAL from a **primary**, where writes happen. Predict whether this browser
+instance reports that it is in recovery.
 
 ```sql
 SELECT pg_is_in_recovery() AS is_recovering,
@@ -18,14 +19,13 @@ SELECT pg_is_in_recovery() AS is_recovering,
        pg_last_wal_replay_lsn() AS last_replayed;
 ```
 
-The embedded instance is not a streaming standby. A false recovery flag and NULL receive/replay
-positions are real observations, not an error to replace with invented lag values. They identify
-which replication questions this particular process can answer.
+Find `is_recovering`, `last_received`, and `last_replayed`. False and NULL values here describe
+a standalone instance with no upstream WAL to receive or replay.
 
 ## Browser: compare byte positions
 
-An **LSN**, log sequence number, is a position in the write-ahead log, not a timestamp. Capture a
-position, make a committed change, and inspect the distance to the current position.
+A **log sequence number** (LSN) is a position in the WAL, measured in bytes. SQL 02 saves this
+position and commits a write. SQL 03 compares the saved position with the current one.
 
 ```sql
 CREATE TABLE wal_observation (id integer PRIMARY KEY, captured pg_lsn NOT NULL);
@@ -41,12 +41,16 @@ FROM wal_observation;
 SELECT count(*) AS committed_rows FROM wal_payload;
 ```
 
-The distance describes WAL position advancement in this instance. It can include catalog and other
+Read `wal_bytes_since_capture` and `committed_rows`. The distance describes WAL advancement
+in this instance. It can include catalog and other
 engine work, not only payload bytes. It does not measure network traffic, standby lag in seconds,
 or a guarantee that another server has applied anything. Do not convert the number directly into
 replication delay.
 
 ## Explain the browser evidence
+
+Which columns identify the WAL written here? What observation would you need from a standby
+to determine how much it has replayed?
 
 <details><summary>Hint: identify the missing observation</summary>
 
@@ -73,12 +77,11 @@ questions against two genuine server processes.
 
 ## Optional server extension
 
-The browser investigation above is complete on its own. Use the [server setup](./server-setup.html)
-for the additional behavior below. Its copied commands run in a separate database and do not
-change your browser database.
+To run this extension, follow [server setup](./server-setup.html). Copy each panel to the
+labelled terminal or psql session. These commands use the Docker database.
 
 <details class="server-extension" id="server-extension">
-<summary>Open the streaming replication and promotion exercise</summary>
+<summary>Pause, resume, and promote a streaming standby</summary>
 
 A user commits an order on the primary and cannot immediately read it from a replica. Pause replay to separate received WAL from visible state.
 
@@ -95,15 +98,14 @@ INSERT INTO lab.replica_marker VALUES (1, 'base backup');
 SELECT pg_is_in_recovery() AS is_standby, pg_current_wal_lsn() AS primary_lsn;
 ```
 
-An **LSN**, log sequence number, identifies a position in PostgreSQL's write-ahead log. WAL describes
-changes needed for recovery. A streaming standby receives WAL and replays it against a base backup.
-The one-container layout isolates server behavior, not machine-failure resilience.
+The first command records a marker on the primary. The standby will start from a base backup,
+a copy of the primary's data files, then apply WAL received from the primary. Both server
+processes run in one container.
 
 ## Start a standby
 
-The helper refuses to overwrite an existing standby directory. If you have already used this lesson,
-run `bash /lab/server/standby.sh stop` inside the container and reset the container before replaying,
-or use the documented helper cleanup for this disposable standby only.
+Before replaying this exercise, run the cleanup command at the end of the extension, then reset
+the server fixture. The start helper requires an unused standby data directory.
 
 ```sh
 docker compose -f server/compose.yml exec -T -u postgres db bash /lab/server/standby.sh start
@@ -165,7 +167,7 @@ split-brain. Never send application writes to both divergent primaries.
 
 ## Explain the visibility boundary
 
-<details><summary>Hint</summary>
+<details><summary>A hint for explaining the server results</summary>
 
 A successful primary commit, a received WAL record, a replayed record, and a promoted writer are
 four different states. Name which state the application actually requires.
@@ -193,7 +195,6 @@ Clean up the disposable secondary process and files after the lesson:
 docker compose -f server/compose.yml exec -T -u postgres db bash /lab/server/standby.sh clean
 ```
 
-**Takeaway:** Replication has separate transport, replay, consistency, and failover concerns.
 Next: [resolve a production incident](./production-incident.html).
 
 Primary source: [Warm standby and streaming replication](https://www.postgresql.org/docs/current/warm-standby.html).

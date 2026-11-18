@@ -27,7 +27,8 @@ SELECT tableoid::regclass AS partition, count(*)
 FROM orders_by_month GROUP BY tableoid ORDER BY tableoid::regclass::text;
 ```
 
-`tableoid` identifies the physical relation containing a row. The fixture ends during February,
+Find the January and February counts under `partition`. `tableoid` identifies which table stores
+a row. The fixture ends during February,
 so both partitions contain data. No default partition is present; an out-of-range insert fails until
 an appropriate partition exists.
 
@@ -81,14 +82,18 @@ SELECT count(*) AS still_in_detached_table FROM orders_jan;
 SELECT count(*) AS still_in_parent FROM orders_by_month;
 ```
 
-Detachment leaves an independent table. Archival or deletion can follow as a separate decision.
+Compare `still_in_detached_table` and `still_in_parent` after detaching January. Detachment leaves
+an independent table. Archival or deletion can follow as a separate decision.
 The command needs locks; the browser does not demonstrate its blocking behavior on a busy server.
 More partitions add planning and maintenance overhead, so partitioning every small category is not
 a universal improvement.
 
 ## Explain the boundaries
 
-<details><summary>Hint</summary>
+Use a table name from each plan to explain pruning. Which node describes how the surviving
+table finds the tenant's rows?
+
+<details><summary>A hint for explaining the results</summary>
 
 Separate three questions: which relations can contain a match, how a surviving relation finds rows,
 and what keys the database can prove unique.
@@ -112,11 +117,22 @@ PostgreSQL's operators and implementation details can differ. This reading is op
 
 ## Transfer the idea
 
-Add a March partition and insert a row at its lower boundary. Predict both the routing and a query's
-pruning behavior. Write a retention procedure that distinguishes detach, verify/archive, and drop.
-Explain what you would measure before moving a small unpartitioned table to this layout.
+After the original experiments, replace [SQL 04](#sql-4) with the following and select
+**Run SQL**.
 
-**Takeaway:** Partitioning narrows relations; indexes narrow access inside those relations.
+```text
+CREATE TABLE orders_mar PARTITION OF orders_by_month
+FOR VALUES FROM ('2025-03-01') TO ('2025-04-01');
+INSERT INTO orders_by_month (id, created_at, tenant_id)
+VALUES (60001, '2025-03-01', 42) RETURNING tableoid::regclass AS partition;
+EXPLAIN (COSTS OFF)
+SELECT id FROM orders_by_month
+WHERE created_at >= '2025-03-01' AND created_at < '2025-04-01';
+```
+
+Which `partition` accepts midnight on March 1? Find the table name in the plan to check whether
+PostgreSQL can skip February. What would you verify before dropping or archiving a detached table?
+
 Next: [follow a row version](./mvcc.html).
 
 Primary source: [Table partitioning](https://www.postgresql.org/docs/current/ddl-partitioning.html).

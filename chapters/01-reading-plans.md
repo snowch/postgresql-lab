@@ -4,7 +4,6 @@ The order history endpoint slows down as the table grows. Find where PostgreSQL 
 
 **You will learn to** read a plan from its children upward, distinguish estimates from observations,
 and explain why a selective query can still inspect every row. You need basic filtering and sorting.
-The page prepares a fresh database automatically. Run the editors in order.
 
 ## The incident
 
@@ -12,8 +11,8 @@ A support agent opens the newest orders for tenant 42. The application needs twe
 an order ID, creation time, and total. The table has a primary-key index on `id`, but no index on
 `tenant_id` or `created_at`.
 
-First inspect the table's indexes. An index is a separate structure PostgreSQL can use to locate
-rows without searching the whole table. A primary key creates a unique index automatically.
+In SQL 01, inspect `indexname` and `indexdef`. An index is a separate structure PostgreSQL can use
+to locate rows. Declaring a primary key creates a unique index automatically.
 
 ```sql
 SELECT indexname, indexdef
@@ -32,7 +31,8 @@ ORDER BY created_at DESC
 LIMIT 20;
 ```
 
-This result shows the endpoint's answer. It does not reveal how much work produced that answer.
+SQL 02 returns the endpoint's twenty orders. In SQL 03, find the steps PostgreSQL plans to use
+to produce them.
 
 ## Ask for the plan
 
@@ -108,9 +108,9 @@ LIMIT 20;
 A similar plan can do different amounts of downstream work. Both scans inspect the table, but the
 broad predicate sends more rows to the sort. A plan's node names alone are not enough to diagnose it.
 
-Run the plan again. The execution time may change as caches warm or browser scheduling changes.
-That variation does not prove the SQL became better. Prefer row counts, filters, ordering work,
-and buffer activity when explaining a change.
+Select **Run SQL** again without editing this query. Compare **Execution Time** with the previous
+run. Cache warming and browser scheduling can change the time even when the query is identical.
+Use rows, filters, sort, and buffer activity to describe the work.
 
 ## Explain your evidence
 

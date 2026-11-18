@@ -1,7 +1,7 @@
 # What the browser can tell you
 
-The lab runs real PostgreSQL through PGlite, an embedded build compiled to WebAssembly. Its SQL results
-and query plans come from the engine, not scripted demonstrations.
+The lab runs PostgreSQL through PGlite, a build that runs in the browser using WebAssembly. PostgreSQL
+executes the SQL in your editors and produces the results and plans you see.
 
 ## What you can investigate here
 
@@ -22,16 +22,13 @@ streaming replication, failover, continuous WAL recovery, server background main
 Seven chapters keep those additional behaviors in optional [server extensions](./server-setup.html),
 with copied commands and independent sessions. Browser snapshot recovery is implemented separately.
 
-All eighteen chapters include runnable browser SQL. Some PostgreSQL extensions depend on native libraries or facilities unavailable in PGlite. A new
-lesson must verify extension availability before promising a browser experiment.
-
 ## Browser recovery checkpoints
 
 The recovery chapter uses PGlite's data-directory export API to create a compressed database archive.
 Restoring creates a new worker and engine instance using those saved files; the fixture seed is not
 replayed. The SQL verification checks recovered rows and the absence of later committed work.
-Saving requires a completed transaction. A failed checkpoint save rolls back an open transaction,
-as other operation errors do in this lab.
+Finish any open transaction before saving. If you select **Save checkpoint** with a transaction
+open, it stays open. Run `COMMIT` to save its writes or `ROLLBACK` to discard them, then save again.
 
 Reset clears the in-page checkpoint; navigation or reload discards it too. Downloading preserves an
 archive, but this release has no uploaded-archive import control. The archive is tied to the PGlite

@@ -3,8 +3,8 @@
 The endpoint filters by tenant and orders by creation time. Build an index that supports both operations, then check what it costs.
 
 **You will learn to** compare an index's search condition with a residual filter, choose useful
-column order for an equality-and-sort workload, and distinguish index access from index-only access.
-Read [query plans](./reading-plans.html) first. This page starts with its own fresh database.
+column order for a query with an equality filter and a sort, and distinguish index access from
+index-only access. Read [query plans](./reading-plans.html) first.
 
 ## Establish the baseline
 
@@ -20,8 +20,8 @@ ORDER BY created_at DESC
 LIMIT 20;
 ```
 
-An index is useful when its organization matches the work a query needs. It can narrow a search,
-supply ordering, or contain the values the query must return. One index need not do all three.
+Save the scan type, **Rows Removed by Filter**, and whether a **Sort** appears. This baseline
+shows what the primary key alone can do for this query.
 
 ## Index the filter
 
@@ -94,8 +94,8 @@ CREATE INDEX orders_tenant_created_cover
 ON orders (tenant_id, created_at DESC) INCLUDE (id, total_cents);
 ```
 
-Run vacuum separately. PostgreSQL prohibits `VACUUM` inside a transaction block; sending several
-statements in one SQL execution can create an implicit transaction block.
+Select **Run SQL** in the editor containing only `VACUUM`. PostgreSQL requires this command
+outside a transaction, and several statements sent together can share a transaction.
 
 ```sql
 VACUUM (ANALYZE) orders;
@@ -186,10 +186,16 @@ PostgreSQL's operators and implementation details can differ. This reading is op
 
 ## Transfer the idea
 
-Change the predicate to `status = 'pending'` and remove the tenant predicate. Does the current index
-organize the pending orders together in newest-first order? Write a candidate index for that workload
-and inspect a plan. A useful answer considers `(status, created_at DESC)` or a partial index with
-`WHERE status = 'pending'`, and explains the additional write cost. Do not force a plan by disabling scans.
+Use the indexes already built on this page. In [SQL 01](#sql-1), replace `tenant_id = 42`
+with `status = 'pending'`, then select **Run SQL**. Record the scan and whether the plan sorts.
+In the same editor, insert this line before `EXPLAIN` and run it again.
+
+```text
+CREATE INDEX orders_pending_time ON orders (created_at DESC) WHERE status = 'pending';
+```
+
+Compare the scan and sort again. Does the index let PostgreSQL find the newest pending orders
+without sorting them? Each change to an indexed order can add write work.
 
 ## What this cannot tell you
 

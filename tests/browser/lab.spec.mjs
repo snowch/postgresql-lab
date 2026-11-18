@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {pages} from '../../scripts/catalog.mjs';
+import {verifyTransfer} from './transfer.mjs';
 for(const [slug,,file,,runtime] of pages.filter(([s,,f,,r])=>r!=='server' && (s==='getting-started'||f.startsWith('chapters/')))){
   test(`${slug}: genuine browser WASM executes every experiment`,async({page})=>{
     const failures=[];page.on('pageerror',e=>failures.push(e.message));
@@ -62,7 +63,7 @@ for(const [slug,,file,,runtime] of pages.filter(([s,,f,,r])=>r!=='server' && (s=
       await expect(cell.locator('.query-error')).toBeHidden();
       await cell.locator('textarea').fill('DELETE FROM orders;');
       await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
-      await expect(cell.locator('.result')).toContainText('60000 affected');
+      await expect(cell.locator('.result')).toContainText('60000 rows affected');
       await page.getByRole('button',{name:'Reset database',exact:true}).click();
       await expect(page.locator('#db-status')).toContainText('Ready',{timeout:60000});
       await cell.locator('textarea').fill('SELECT count(*) FROM orders;');
@@ -77,6 +78,8 @@ for(const [slug,,file,,runtime] of pages.filter(([s,,f,,r])=>r!=='server' && (s=
       await page.getByRole('button',{name:'Reset database',exact:true}).click();
       await expect(page.locator('#db-status')).toContainText('Ready',{timeout:60000});
     }
+    if(slug==='reading-plans')await page.reload();
+    await verifyTransfer(page,slug);
   });
 }
 test('mobile navigation and SQL stay within viewport',async({page})=>{
@@ -113,6 +116,20 @@ test('a running SQL cell keeps local feedback and restores keyboard focus',async
   await expect(cell.locator('.result')).toContainText('before');
   await expect(cell.locator('.result')).toContainText('after');
   await expect(run).toBeFocused();
+});
+
+test('a same-source SQL failure marks the earlier successful result',async({page})=>{
+  await page.goto('getting-started.html');
+  const cell=page.locator('.sql-cell').first();
+  const run=cell.getByRole('button',{name:'Run SQL',exact:true});
+  await expect(run).toBeEnabled({timeout:60000});
+  await cell.locator('textarea').fill('CREATE TEMP TABLE retry_duplicate AS SELECT 1 AS prior_value; SELECT * FROM retry_duplicate;');
+  await run.click();
+  await expect(cell.locator('.result table')).toContainText('prior_value');
+  await run.click();
+  await expect(cell.locator('.query-error')).toContainText('already exists');
+  await expect(cell.locator('.execution-note')).toContainText('The latest attempt failed. The previous result is shown below.');
+  await expect(cell.locator('.result table')).toContainText('prior_value');
 });
 
 for(const width of [820,1024,1280]) {
@@ -155,20 +172,59 @@ test('hybrid lessons keep server commands optional and separate from the browser
   await page.goto('locks.html#find-the-blocker');
   await expect(page.locator('.server-extension')).toHaveAttribute('open','');
 });
-test('recovery controls reject open transactions and reset clears the checkpoint',async({page})=>{
+test('a blocked checkpoint preserves the transaction and saved checkpoint, and reset clears the checkpoint',async({page})=>{
   await page.goto('backup-recovery.html');
   await expect(page.locator('#db-status')).toContainText('Ready',{timeout:60000});
   const cell=page.locator('.sql-cell').first();
-  await cell.locator('textarea').fill('BEGIN;');
+  await cell.locator('textarea').fill('CREATE TABLE recovery_check (id int); INSERT INTO recovery_check VALUES (1);');
   await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
   await expect(cell.locator('.result')).toContainText('Statement complete');
   await page.getByRole('button',{name:'Save checkpoint',exact:true}).click();
-  await expect(page.locator('#checkpoint-status')).toContainText('Commit or roll back',{timeout:60000});
-  await page.getByRole('button',{name:'Save checkpoint',exact:true}).click();
   await expect(page.locator('#checkpoint-status')).toContainText('Checkpoint saved',{timeout:60000});
+  await cell.locator('textarea').fill('BEGIN; INSERT INTO recovery_check VALUES (2); SELECT id FROM recovery_check ORDER BY id;');
+  await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
+  await expect(cell.locator('.result tbody td')).toHaveText(['1','2']);
+  await page.getByRole('button',{name:'Save checkpoint',exact:true}).click();
+  await expect(page.locator('#checkpoint-status')).toContainText('The transaction is still open');
+  await cell.locator('textarea').fill('SELECT id FROM recovery_check ORDER BY id;');
+  await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
+  await expect(cell.locator('.result tbody td')).toHaveText(['1','2']);
+  await cell.locator('textarea').fill('COMMIT;');
+  await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
+  await expect(cell.locator('.result table')).toHaveCount(0);
+  await page.getByRole('button',{name:'Restore checkpoint',exact:true}).click();
+  await expect(page.locator('#checkpoint-status')).toContainText('Checkpoint restored',{timeout:60000});
+  await cell.locator('textarea').fill('SELECT id FROM recovery_check ORDER BY id;');
+  await cell.getByRole('button',{name:'Run SQL',exact:true}).click();
+  await expect(cell.locator('.result tbody td')).toHaveText(['1']);
   await page.getByRole('button',{name:'Reset database',exact:true}).click();
   await expect(page.locator('#db-status')).toContainText('Ready',{timeout:60000});
   await expect(page.getByRole('button',{name:'Restore checkpoint',exact:true})).toBeDisabled();
   await expect(page.getByRole('button',{name:'Download checkpoint',exact:true})).toBeDisabled();
   await expect(page.locator('#checkpoint-status')).toHaveText('No checkpoint saved.');
 });
+
+for (const colorScheme of ['light','dark']) {
+  test(`optional contents and browser actions are usable on a narrow ${colorScheme} viewport`, async ({page})=>{
+    await page.emulateMedia({colorScheme});
+    await page.setViewportSize({width:320,height:800});
+    await page.goto('locks.html');
+    const contents=page.locator('.chapter-contents');
+    const summary=contents.locator('summary');
+    await expect(contents).not.toHaveAttribute('open');
+    await expect(page.locator('.experiment-setup')).toBeVisible();
+    await summary.press('Enter');
+    await expect(contents.getByRole('link',{name:'Transfer the idea'})).toBeVisible();
+    await summary.press('Space');
+    await expect(contents).not.toHaveAttribute('open');
+    const editor=page.locator('#sql-1');
+    await expect(page.locator('.run').first()).toBeEnabled({timeout:60000});
+    await editor.press('Control+Enter');
+    await expect(page.locator('.result').first()).toContainText('1 row affected');
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    const menu = await page.getByRole('button',{name:'Chapters',exact:true}).boundingBox();
+    expect(menu.x + menu.width).toBeLessThanOrEqual(310);
+    await editor.scrollIntoViewIfNeeded();
+    await page.screenshot({path:`test-results/locks-320-${colorScheme}.png`});
+  });
+}

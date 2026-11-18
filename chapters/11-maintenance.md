@@ -19,8 +19,8 @@ EXPLAIN (ANALYZE, TIMING OFF)
 SELECT id FROM orders_growth WHERE tenant_id = 999;
 ```
 
-Tenant 999 has no rows. The planner generally retains a small nonzero estimate rather than promising
-an impossible result. Now create a new distribution without refreshing statistics.
+In SQL 01, find estimated and actual rows for tenant 999. It starts with zero actual rows.
+SQL 02 adds 15,000 matching orders using the old statistics.
 
 ```sql
 INSERT INTO orders_growth
@@ -47,7 +47,8 @@ SELECT attname, n_distinct, most_common_vals, most_common_freqs
 FROM pg_stats WHERE tablename = 'orders_growth' AND attname = 'tenant_id';
 ```
 
-The most-common-values summary should now describe the large tenant. The estimate need not be exact
+Look for 999 in `most_common_vals`. Compare the scan's estimated and actual rows before and
+after the refresh to see whether it learned the new tenant frequency. The estimate need not be exact
 because the collection process samples. Compare the error before and after; do not require a fixed
 plan node or execution-time improvement.
 
@@ -80,7 +81,9 @@ embedded lab demonstrates manual actions rather than the server's background sch
 
 ## Explain the intervention
 
-<details><summary>Hint</summary>
+Which observation points to stale statistics? What changed after analyzing `tenant_id` alone?
+
+<details><summary>A hint for explaining the results</summary>
 
 Identify whether the problem is obsolete row versions, obsolete statistical summaries, missing
 relationship information, or damaged/inefficient index storage. These are different hypotheses.
@@ -104,12 +107,12 @@ PostgreSQL's operators and implementation details can differ. This reading is op
 
 ## Transfer the idea
 
-Compare a post-batch single-column error with a correlation error from chapter 3. Write a short
-diagnostic decision sequence: data change, estimate mismatch, existing summaries, targeted collection,
-and a repeated plan measurement. Include the outcome that would disprove your first hypothesis.
+Compare estimated and actual scan rows after the batch here and after combining the two filters
+in [Diagnose an estimate](./planner-estimates.html#combine-the-filters). Which mismatch followed a
+data change? Use the before-and-after ANALYZE results in both chapters to decide whether fresher
+single-column statistics are sufficient.
 
-**Takeaway:** Refresh the information the planner needs before rebuilding structures it may already have.
-Next: [choose an isolation level on a real server](./transactions.html).
+Next: [choose an isolation level](./transactions.html).
 
 Primary sources: [ANALYZE](https://www.postgresql.org/docs/current/sql-analyze.html) and
 [planner statistics](https://www.postgresql.org/docs/current/planner-stats.html).

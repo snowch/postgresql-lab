@@ -1,11 +1,9 @@
 # Follow a row version
 
-An UPDATE changes the value an application sees, but it also changes the row's physical identity. Follow that difference before explaining vacuum.
+An UPDATE preserves the primary key and creates a new stored row version. Follow that difference before explaining vacuum.
 
 **You will learn to** distinguish logical identity from tuple location, connect updates to visibility,
-and understand the conditions behind HOT updates. Prerequisite: transactions and indexes.
-This single-connection investigation observes row versions indirectly; independent snapshots follow
-in [the isolation lesson](./transactions.html).
+and explain when PostgreSQL can skip writing new entries in ordinary indexes. Prerequisite: transactions and indexes.
 
 ## Separate identity from location
 
@@ -36,7 +34,8 @@ SELECT id, ctid, xmin, xmax, balance FROM version_demo WHERE id = 1;
 SELECT count(*) AS visible_rows FROM version_demo;
 ```
 
-The key remains the same while the visible version's location changes. An ordinary query applies
+Compare `id`, `ctid`, and `balance` in SQL 01 and SQL 02. The key remains the same while the
+visible version's location changes. An ordinary query applies
 transaction visibility rules; it is not a listing of all physical versions. The old version may still
 occupy storage until no relevant snapshot needs it. A later update, vacuum, or rewrite can move or
 remove tuples, so save the primary key rather than `ctid` in application references.
@@ -80,7 +79,10 @@ updates. Page space can become reusable without shrinking the relation file.
 
 ## Explain the evidence
 
-<details><summary>Hint</summary>
+Which column identifies the account after both updates? What do the changed `ctid` and the
+final `visible_rows` tell you about physical versions and logical rows?
+
+<details><summary>A hint for explaining the results</summary>
 
 A primary key identifies the logical entity. A tuple address identifies a particular stored version.
 Normal SELECT output is filtered by visibility, not by whether bytes still exist.
@@ -99,10 +101,20 @@ concurrent snapshots or measure production bloat.
 
 ## Transfer the idea
 
-Add an index on `note`, then repeat a note update. Predict which HOT condition has changed. Explain
-why reducing the number of indexes can affect writes even when the updated application's key never changes.
+After the original experiments, replace [SQL 03](#sql-3) with the following and select
+**Run SQL**. The two queries read the same row before and after a change to the newly indexed value.
 
-**Takeaway:** Logical updates create physical version-management work.
+```text
+CREATE INDEX version_note ON version_demo (note);
+SELECT id, note, ctid FROM version_demo WHERE id = 1;
+UPDATE version_demo SET note = 'changed with a note index' WHERE id = 1;
+SELECT id, note, ctid FROM version_demo WHERE id = 1;
+```
+
+Compare `id`, `note`, and `ctid`. What HOT condition did the new index and value change remove?
+The change in `ctid` identifies a new tuple version. The asynchronous statistics in the original
+example are optional evidence and have no expected counter value.
+
 Next: [reclaim space with vacuum](./vacuum.html).
 
 Primary sources: [System columns](https://www.postgresql.org/docs/current/ddl-system-columns.html),

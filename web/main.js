@@ -58,7 +58,7 @@ function startLab() {
     execution=0;
     cells.forEach(cell=>{
       cell.querySelector('.result').replaceChildren();
-      delete cell.dataset.executed;delete cell.dataset.execution;
+      delete cell.dataset.executed;delete cell.dataset.execution;delete cell.dataset.attemptFailed;
       cell.querySelector('.execution-note').hidden=true;
       cell.querySelector('.query-error').hidden=true;
     });
@@ -66,14 +66,20 @@ function startLab() {
   function updateNotes() {
     for(const cell of cells) {
       const note=cell.querySelector('.execution-note');
-      note.hidden=!cell.dataset.execution;
-      if(!note.hidden) {
-        const message=cell.querySelector('textarea').value!==cell.dataset.executed
-          ? 'SQL edited. This result is from the last successful SQL in this editor.'
-          : `Successful execution ${cell.dataset.execution}.`;
-        const later=Number(cell.dataset.execution)<execution?' The database may have changed since this result.':'';
-        note.textContent=message+later;
+      const messages = [];
+      if (cell.dataset.execution) {
+        if (cell.querySelector('textarea').value !== cell.dataset.executed) {
+          messages.push('SQL edited. This result is from the last successful SQL in this editor.');
+        }
+        if (cell.dataset.attemptFailed) {
+          messages.push('The latest attempt failed. The previous result is shown below.');
+        }
+        if (Number(cell.dataset.execution) < execution) {
+          messages.push('The database may have changed since this result.');
+        }
       }
+      note.hidden = !messages.length;
+      note.textContent = messages.join(' ');
     }
   }
   function reportFailure(message) {
@@ -81,6 +87,7 @@ function startLab() {
     const error=active.querySelector('.query-error');
     error.hidden=false;
     error.textContent=message;
+    active.dataset.attemptFailed='true';
     execution++;
     updateNotes();
   }
@@ -96,9 +103,13 @@ function startLab() {
       const isPlan=result.fields[0]?.name==='QUERY PLAN';
       const note=document.createElement('p');note.className='result-note';
       if(isPlan)note.textContent=result.totalRows>100?'Query plan. First 100 lines shown.':'Query plan';
-      else note.textContent=result.fields.length
-        ? `${result.totalRows} row(s)${result.totalRows>100?' · showing first 100':''}`
-        : `Statement complete${result.affectedRows!==undefined?` · ${result.affectedRows} affected row(s)`:''}`;
+      else if(result.fields.length) {
+        const rows=`${result.totalRows} ${result.totalRows===1?'row':'rows'} returned.`;
+        note.textContent=rows+(result.totalRows>100?' Showing the first 100.':'');
+      }else {
+        const affected=result.affectedRows;
+        note.textContent=affected===undefined?'Statement complete.':`Statement complete. ${affected} ${affected===1?'row':'rows'} affected.`;
+      }
       container.append(note);
       if(!result.rows.length)continue;
       if(isPlan) {
@@ -152,8 +163,11 @@ function startLab() {
         if(data.restored)checkpointStatus.textContent='Checkpoint restored. Run the verification SQL below.';
       }else if(data.type==='snapshot') {
         savedCheckpoint=data.snapshot;
-        checkpointStatus.textContent=`Checkpoint saved · ${(savedCheckpoint.size/1048576).toFixed(1)} MiB. You can now damage the database.`;
+        checkpointStatus.textContent=`Checkpoint saved (${(savedCheckpoint.size/1048576).toFixed(1)} MiB). Run the next experiment when ready.`;
         status.textContent='Ready · recovery checkpoint saved';
+      }else if(data.type==='checkpoint-blocked') {
+        checkpointStatus.textContent='Checkpoint not saved. The transaction is still open. Run COMMIT or ROLLBACK, then save again.';
+        status.textContent='Ready · transaction open';
       }else if(data.type==='error') {
         if(active) {
           reportFailure(`SQL error. ${data.message}. Open transactions are rolled back.`);
@@ -161,6 +175,7 @@ function startLab() {
         status.textContent=ready?'Operation failed · edit and retry, or reset':`Database failed to start: ${data.message}`;
       }else if(active) {
         render(active.querySelector('.result'),data.results);
+        delete active.dataset.attemptFailed;
         active.dataset.executed=active.dataset.submitted;active.dataset.execution=String(++execution);updateNotes();
         status.textContent='Ready · changes shared by experiments on this page';
       }
@@ -234,9 +249,12 @@ function startLab() {
   initialize();
 }
 function revealAnchor() {
-  const target=document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  let id;
+  try {id=decodeURIComponent(location.hash.slice(1));}
+  catch {return;}
+  const target=document.getElementById(id);
   if(!target)return;
-  let parent=target.parentElement;
+  let parent=target;
   while(parent){if(parent.tagName==='DETAILS')parent.open=true;parent=parent.parentElement;}
   if(location.hash)requestAnimationFrame(()=>target.scrollIntoView());
 }

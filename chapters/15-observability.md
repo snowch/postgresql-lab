@@ -3,8 +3,8 @@
 A query returns few rows but performs substantial work. Inspect rows, buffers, and sort behavior in the browser before optionally ranking a server-wide workload.
 
 **You will learn to** distinguish result size from work performed and identify memory-driven sort
-spilling. Prerequisites: plans and aggregation. All browser output below comes from PostgreSQL;
-no cumulative server counters are synthesized.
+spilling, when a sort writes temporary data because it lacks memory. Prerequisites: plans and
+aggregation. These browser plans report individual runs.
 
 ## Browser: count the work, not only the answer
 
@@ -17,8 +17,8 @@ EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
 SELECT count(*) FROM orders WHERE tenant_id = 43;
 ```
 
-The aggregate emits one row, while the scan filters its input. Compare the scan's actual output
-and removed rows. Repeating a query may change cache activity and elapsed time without changing
+The aggregate emits one row. For each tenant, inspect the scan's **actual rows** and **Rows
+Removed by Filter**. How much input did each scan examine to return its one count? Repeating a query may change cache activity and elapsed time without changing
 the amount of data its access path must inspect. A pair of samples does not establish a latency distribution.
 
 ## Browser: expose memory pressure
@@ -47,11 +47,14 @@ SELECT id, payload FROM orders ORDER BY total_cents, id;
 RESET work_mem;
 ```
 
-Compare the method and temporary work with the previous execution. Raising a budget can remove
+Compare **Sort Method** and temporary blocks read or written with SQL 02. Raising a budget can remove
 spilling for this fixture, but concurrent queries and multiple operators can multiply the total
 memory demand. A faster single sort does not establish a safe server-wide setting.
 
 ## Explain the browser evidence
+
+Which output measures the returned rows, which measures the scan, and which shows why the
+64 kB sort used temporary storage?
 
 <details><summary>Hint: keep four quantities separate</summary>
 
@@ -77,18 +80,19 @@ PostgreSQL's operators and implementation details can differ. This reading is op
 
 ## Transfer the idea
 
-Add LIMIT 20 to the full-sort query. Predict its held state and compare the plan. Explain why a
-small top-N structure can save memory while still reading all candidates. Then state which
-application counters you would need to decide whether this shape dominates an actual workload.
+After the original experiments, return to [SQL 02](#sql-2), which sets `work_mem` to
+`64kB`. Change `ORDER BY total_cents, id;` to `ORDER BY total_cents, id LIMIT 20;`
+and select **Run SQL**. Compare **Sort Method**, temporary blocks, and the child scan's actual
+row count with the original 64 kB result. Can the sort keep fewer rows in memory while the
+scan still reads the same input?
 
 ## Optional server extension
 
-The browser investigation above is complete on its own. Use the [server setup](./server-setup.html)
-for the additional behavior below. Its copied commands run in a separate database and do not
-change your browser database.
+To run this extension, follow [server setup](./server-setup.html). Copy each panel to the
+labelled terminal or psql session. These commands use the Docker database.
 
 <details class="server-extension" id="server-extension">
-<summary>Open the independent-session server exercise</summary>
+<summary>Measure cumulative work with pg_stat_statements</summary>
 
 One request looks cheap in isolation, but thousands of calls dominate the service's database time. Rank the workload before tuning one example.
 
@@ -128,7 +132,7 @@ WHERE query LIKE '%lab.orders%'
 ORDER BY total_exec_time DESC;
 ```
 
-Find the count shape and its call count. The sum and count statements may exchange rank across
+Find the `query` entry for the three counts and compare its `calls` with the sum entry. The sum and count statements may exchange rank across
 machines. `total_exec_time` accumulates server execution time; `mean_exec_time` is an average, not
 a tail-latency percentile. The `rows` field reports rows emitted or affected, not every row inspected.
 A COUNT returning one result can still scan thousands of source rows.
@@ -139,8 +143,8 @@ not a direct measure of CPU time or elapsed wall time for the entire service.
 
 ## Connect the aggregate to a plan
 
-Choose a representative parameter and inspect its plan. Predict whether another tenant with a much
-larger population could need a different path.
+Run the supplied Observer query for tenant 42. In the plan, find the scan's actual rows and
+**Rows Removed by Filter**. Why would a different tenant population warrant a separate sample?
 
 ```sql-observer
 EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
@@ -171,7 +175,7 @@ can still participate in a latency incident through lock ownership and long tran
 
 ## Explain the next measurement
 
-<details><summary>Hint</summary>
+<details><summary>A hint for explaining the server results</summary>
 
 State the observation window, call count, work per call, and waiting separately. A single average
 cannot stand in for all four.
@@ -193,7 +197,6 @@ Design a five-minute measurement for a high-volume endpoint. Name the counters c
 boundaries, request counts from the application, and one tail-latency metric. Explain how you would
 notice that a faster query is being called twice as often after a release.
 
-**Takeaway:** Query shape, frequency, parameter distribution, and waits together explain workload cost.
 Next: [prove you can recover](./backup-recovery.html).
 
 Primary sources: [pg_stat_statements](https://www.postgresql.org/docs/current/pgstatstatements.html) and

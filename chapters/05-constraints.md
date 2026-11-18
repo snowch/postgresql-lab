@@ -4,7 +4,7 @@ Two application paths disagree about whether an order may have a negative total.
 
 **You will learn to** use checks, uniqueness, and foreign keys, reason about NULL, and distinguish
 statement-time checks from deferred validation. Prerequisite: basic DDL and transactions.
-This page creates small teaching tables beside the shared fixture.
+The first editor creates the payment table used by the rest of the chapter.
 
 ## Put the invariant in the schema
 
@@ -54,8 +54,8 @@ ALTER TABLE payments ALTER COLUMN amount SET NOT NULL;
 SELECT pg_temp.attempt('INSERT INTO payments VALUES (3, ''missing'', NULL)') AS result;
 ```
 
-Check the returned error and verify the intended row was not stored. A CHECK plus NOT NULL expresses
-the two parts of the amount invariant. If missing references should conflict too, PostgreSQL supports
+Read `result` for the first ALTER and the final insert. The ALTER identifies the preexisting NULL.
+The next statements fill it and add the required-value rule. The final insert tests that new rule. If missing references should conflict too, PostgreSQL supports
 `UNIQUE NULLS NOT DISTINCT`; choose that behavior explicitly instead of assuming all uniqueness works alike.
 
 ## Protect relationships
@@ -83,8 +83,8 @@ bring a deferred check forward within a transaction.
 
 ## Define deletion behavior
 
-The default reference action prevents deleting a referenced account. Predict the error rather than
-assuming the application can silently orphan the payment.
+Predict which constraint the delete will violate. The default foreign-key action protects a
+referenced account from deletion.
 
 The helper catches statement errors, while an initially deferred foreign key can fail only when the
 surrounding execution commits. Make this foreign key immediate by default before testing the delete,
@@ -96,7 +96,8 @@ SELECT pg_temp.attempt('DELETE FROM billing_accounts WHERE id = 9') AS result;
 SELECT count(*) AS accounts_remaining FROM billing_accounts;
 ```
 
-Choose `ON DELETE CASCADE` only when deleting the parent should delete its children. A foreign key
+Compare the delete's `result` with `accounts_remaining`. The failed delete leaves account 9 in place.
+`ON DELETE CASCADE` instead makes deleting a parent delete its children. A foreign key
 also does not automatically create an index on its referencing columns; check parent-delete and
 join workloads separately before adding one.
 
@@ -105,7 +106,7 @@ join workloads separately before adding one.
 Why did the first NULL amount pass? Why could the deferred insert refer to account 9 before it
 existed? Which rule determines whether deleting an account deletes its payments?
 
-<details><summary>Hint</summary>
+<details><summary>A hint for explaining the results</summary>
 
 Separate the truth value of a check, the timing of validation, and the action chosen for deletion.
 
@@ -122,11 +123,22 @@ and cascading deletion encode different business rules.
 
 ## Transfer the idea
 
-Model a reservation with a start and end timestamp. Express nonempty duration and required values.
-Then explain why preventing overlapping reservations for the same resource needs more than that
-row-local CHECK. Investigate a range type and an exclusion constraint for the cross-row rule.
+After the original experiments, replace [SQL 05](#sql-5) with the following and select
+**Run SQL**. The helper in this chapter reports each rejected write in its own result.
 
-**Takeaway:** A constraint states what must be true and when PostgreSQL must verify it.
+```text
+CREATE TABLE reservation_demo (
+  starts_at timestamp NOT NULL,
+  ends_at timestamp NOT NULL CHECK (ends_at > starts_at)
+);
+SELECT pg_temp.attempt($$INSERT INTO reservation_demo VALUES ('2025-01-01', '2025-01-01')$$) AS empty_duration;
+SELECT pg_temp.attempt($$INSERT INTO reservation_demo VALUES (NULL, '2025-01-02')$$) AS missing_start;
+```
+
+Which constraint name or column appears in each message? A row-level check compares the two
+values on one reservation. To reject overlaps with another row, research
+[exclusion constraints](https://www.postgresql.org/docs/current/ddl-constraints.html#DDL-CONSTRAINTS-EXCLUSION).
+
 Next: [work with sets and windows](./advanced-sql.html).
 
 Primary sources: [Constraints](https://www.postgresql.org/docs/current/ddl-constraints.html) and

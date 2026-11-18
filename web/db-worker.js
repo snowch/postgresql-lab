@@ -17,7 +17,10 @@ self.onmessage = async ({ data }) => {
       const result = await db.query('SELECT version() AS version');
       self.postMessage({ type:'ready', version:result.rows[0].version, restored:Boolean(data.snapshot) });
     } else if (data.type === 'snapshot') {
-      if (db.isInTransaction()) throw new Error('Commit or roll back the open transaction before saving a checkpoint.');
+      if (db.isInTransaction()) {
+        self.postMessage({type:'checkpoint-blocked'});
+        return;
+      }
       const snapshot = await db.dumpDataDir('gzip');
       self.postMessage({type:'snapshot',snapshot});
     } else {
@@ -26,7 +29,7 @@ self.onmessage = async ({ data }) => {
       self.postMessage({type:'result',results:results.map(r=>({...r,rows:r.rows.slice(0,100),totalRows:r.rows.length}))});
     }
   } catch (error) {
-    if (db) await db.exec('ROLLBACK').catch(()=>{});
+    if (db && data.type === 'exec') await db.exec('ROLLBACK').catch(()=>{});
     self.postMessage({type:'error',message:error.message});
   }
 };

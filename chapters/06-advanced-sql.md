@@ -3,7 +3,8 @@
 A revenue dashboard doubles an order's amount after joining its two events. Repair the query's row multiplicity before tuning its plan.
 
 **You will learn to** reason about join fan-out, aggregate at the correct grain, choose a window frame,
-and use LATERAL for a per-row lookup. Prerequisite: joins, GROUP BY, and basic plans.
+and use LATERAL for a per-row lookup. Join fan-out occurs when one input row matches several rows
+on the other side. Prerequisites include joins, GROUP BY, and basic plans.
 
 ## Reproduce the double count
 
@@ -22,8 +23,8 @@ SELECT sum(o.amount) AS joined_total
 FROM demo_orders o JOIN demo_events e ON e.order_id = o.id;
 ```
 
-Order 1 appears twice; order 3 disappears. Neither behavior is an arithmetic bug in SUM. The query
-aggregates the joined rows it receives. `SUM(DISTINCT amount)` is not a general repair: two different
+In the row table, find the two entries for order 1 and the gap where order 3 would be.
+`joined_total` adds the amount once for every row the join returns. `SUM(DISTINCT amount)` is not a general repair: two different
 orders may legitimately have the same amount.
 
 ## Match the intended grain
@@ -89,7 +90,10 @@ A set-based alternative may be better when processing most orders; compare workl
 
 ## Explain the result
 
-<details><summary>Hint</summary>
+Which query keeps orders without events? In the window output, compare the two rows with
+amount 200. Why can their totals tie under one ordering and differ under another?
+
+<details><summary>A hint for explaining the results</summary>
 
 Write the grain beneath each intermediate relation. Count rows before computing money.
 
@@ -112,11 +116,12 @@ PostgreSQL's operators and implementation details can differ. This reading is op
 
 ## Transfer the idea
 
-Add a fifth order with amount 100 and no events. Predict each total before rerunning it. Design a
-query returning every order, its event count, and a running revenue total without duplicating amounts.
-A good answer defines the grain, tie ordering, and NULL behavior explicitly.
+After running the original editors, add
+`INSERT INTO demo_orders VALUES (5, 100);` above the first statement in [SQL 02](#sql-2).
+Predict which result will change, then select **Run SQL**. Compare `total_with_events` and
+the table of `id`, `amount`, and `events` with your original results. Why does a new order appear
+in one result without raising the total in the other?
 
-**Takeaway:** Understand which rows an operation produces before optimizing how it produces them.
 Next: [give JSONB a job](./jsonb.html).
 
 Primary sources: [Table expressions](https://www.postgresql.org/docs/current/queries-table-expressions.html),
